@@ -1,0 +1,23 @@
+{
+  "method": "mor",
+  "variant": "full_rerank",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "0ad4225",
+  "timestamp": "2026-10-16 00:30:14",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 288.28,
+  "config": {
+    "stage": "rerank.py (sau structure-aware reranker)",
+    "pred_file": ".cache/mor_rerank_pred.pkl",
+    "backfill": "contriever_ft dot product, d\u1ecbch xu\u1ed1ng d\u01b0\u1edbi min(MoR)",
+    "emb_d": "results/kaggle/stark-mor-emb/candidate_emb.npy",
+    "emb_q": "results/kaggle/stark-mor-emb/query_emb_dict.pt",
+    "queries_without_pred": 0
+  },
+  "notes": "MoR \u0111\u1ea7y \u0111\u1ee7: mixed traversal + structure-aware reranker."
+}

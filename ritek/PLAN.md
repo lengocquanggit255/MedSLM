@@ -1,6 +1,6 @@
 # Kế hoạch: chạy lại benchmark trên STaRK-Prime bản RiTeK
 
-Trạng thái (2026-10-16): **đã chốt mọi quyết định; P0 (harness) xong; đang chạy P1.**
+Trạng thái (2026-10-16): **P0, P1 xong. P4 (GNN-RAG A+) đang chạy trên Kaggle** (`ritek-gnnrag-rearev`, account minhduonngg, code 7011a10).
 So sánh dữ liệu: [docs/ritek_prime_compare.json](docs/ritek_prime_compare.json) (`scripts/eda_ritek_prime.py`).
 
 Mọi thứ của lần chạy này nằm trong `ritek/`:
@@ -91,10 +91,10 @@ Kết quả rà soát (2026-10-15):
 | Pha | Việc | Đã đo trên STaRK | Ghi chú |
 |---|---|---|---|
 | P0 | harness | — | ✅ xong 2026-10-16 |
-| P1 | chấm lại BM25, MedCPT, Contriever-FT, MoR | rerank MoR trên CPU 6.6 phút | CPU |
+| P1 | chấm lại BM25, MedCPT, Contriever-FT, MoR | rerank MoR trên CPU 6.6 phút | ✅ 11 run, metric cũ Δ = 0 so với STaRK |
 | P2 | BGE-M3 | MedCPT 7–15 phút/biến thể | 31.1M / 78.7M token. **Probe** trước. |
 | P3 | SubgraphRAG (+ encode gte-large) | `none` 2.6h · `sqrt` 8.2h | |
-| P4 | GNN-RAG A+ | 36–80 phút trên PPR-2000 | kiểm chứng trùng số với code gốc, rồi **probe** |
+| P4 | GNN-RAG A+ | 36–80 phút trên PPR-2000 | ✅ trùng số với code gốc (`test_rearev_equivalence.py`). 🔄 đang train, hạn 11h |
 | P5 | MoR + BGE-M3 và đối chứng | traversal test ~11 phút | |
 | P6 | ARK | — | để sau |
 

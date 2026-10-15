@@ -1,0 +1,32 @@
+{
+  "method": "cosine_medcpt",
+  "variant": "no_rel_max",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "0ad4225",
+  "timestamp": "2026-10-16 00:14:01",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 182.83,
+  "config": {
+    "encoder": "medcpt",
+    "doc_model": "ncbi/MedCPT-Article-Encoder",
+    "query_model": "ncbi/MedCPT-Query-Encoder",
+    "pooling": "CLS",
+    "variant": "no_rel",
+    "split": "test",
+    "dim": 768,
+    "n_chunks": 158223,
+    "chunks_per_doc": 1.223,
+    "chunk_size": 512,
+    "chunk_pool": "max",
+    "encode_sec": 279.3,
+    "n_gpu": 2,
+    "torch": "2.10.0+cu128",
+    "dtype": "fp16"
+  },
+  "notes": "Kaggle T4x2, chunk 512 kh\u00f4ng ch\u1ed3ng l\u1ea5n, pooling=max. \u0110i\u1ec3m = cosine (vector \u0111\u00e3 L2-normalize)."
+}

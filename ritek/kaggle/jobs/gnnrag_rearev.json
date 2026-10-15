@@ -1,0 +1,5 @@
+[
+  {"slug": "ritek-gnnrag-rearev", "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
+   "args": {"NUM_EPOCH": "100", "BATCH": "8", "TEST_BATCH": "4", "DEADLINE_H": "11.0", "CODE_SHA": "7011a10"},
+   "datasets": ["ritek-gnn-data"], "timeout": 43200}
+]
