@@ -1,0 +1,106 @@
+# Cấu hình dùng chung cho MỌI phương pháp benchmark trên STaRK-Prime.
+# Mọi giá trị ở đây là "hợp đồng" của benchmark — đổi giá trị nào thì phải chạy lại
+# TẤT CẢ phương pháp, không chỉ phương pháp bị ảnh hưởng.
+
+dataset:
+  name: stark-prime
+  root: data/stark/prime
+  n_candidates: 129375        # candidate_ids = arange(129375); đã kiểm chứng ở docs/EDA.md §2
+  # QUY TRÌNH 2 BẬC (xem PLAN §2b):
+  #   Bậc 1: test-0.1 (280 query)  -> chạy cho MỌI phương pháp, lấy tín hiệu nhanh
+  #   Bậc 2: test     (2,801 query) -> chỉ cho phương pháp CẦN và KHẢ THI
+  # test-0.1 đã kiểm chứng là tập con thật sự của test => phần corpus-side dùng lại 100%,
+  # chạy 2 bậc chỉ tốn thêm ~10% ở phần inference theo query.
+  split: test-0.1
+  # CẢNH BÁO khi đọc số Bậc 1: n=280 -> CI 95% của Hit@1 là ±5.6pp, ngưỡng phân biệt ~7.9pp.
+  # Không phân định được mFAR vs MoR (gap 4.5pp). Breakdown theo nhóm KHÔNG dùng được
+  # (answers_without_text chỉ còn 42 query, exposure còn 0).
+  # => Bậc 1 để XẾP HẠNG SƠ BỘ và LỌC, không để KẾT LUẬN.
+  # Mọi kết quả PHẢI ghi rõ split; tuyệt đối không trộn 2 bậc trong cùng bảng xếp hạng.
+
+document:
+  # Dựng document theo đúng PrimeSKB.get_doc_info() của stark_qa v1.1.0.
+  # Xem docs/EDA.md §7 và docs/PLAN.md §4.2.
+  add_rel: false              # biến thể "+1 hop" đặt true
+  n_rel: -1                   # GIỮ TOÀN BỘ hàng xóm. Không lấy mẫu, không cắt.
+                              # Đã đổi từ 10 -> -1: việc chống tràn context do CHUNKING lo,
+                              # không do vứt bớt quan hệ. Lấy mẫu ngẫu nhiên n_rel=10 sẽ
+                              # đánh rơi đúng hàng xóm mà query hỏi tới.
+  n_rel_seed: 42              # chỉ còn tác dụng nếu n_rel > 0
+  compact: false              # tham số compact_text của stark_qa
+
+  # Chiến lược chống tràn context. Xem PLAN §4.2.
+  #   chunk : cắt document thành nhiều đoạn, embed từng đoạn (multi-vector).
+  #           KHÔNG mất thông tin. Là cách multi-ada-002 của chính paper STaRK.
+  #   trunc : cắt cụt ở max_tokens (chỉ dùng cho biến thể đối chứng long-context).
+  overflow: chunk
+  chunk_size: 512             # token/chunk, khớp context của MedCPT & Contriever
+  chunk_stride: 512           # không chồng lấn -> 256.9K chunk, 395MB, ~0.3h T4x2
+  chunk_pool: top3_mean       # max | top3_mean. top3_mean = cách STaRK dùng cho
+                              # multi-ada-002. Giảm thiên vị document dài (xem PLAN §4.2).
+  max_tokens: 8192            # chỉ áp dụng khi overflow: trunc
+
+metrics:
+  # 4 metric gốc STaRK + 2 bổ sung (đều có sẵn trong stark_qa.Evaluator). Xem PLAN §3.3.
+  report: [hit@1, hit@5, recall@20, mrr, map@20, rprecision]
+  # Kiểm định cặp bắt buộc khi so 2 phương pháp (cùng tập query):
+  #   McNemar cho hit@k; paired bootstrap 10k lần cho recall/mrr/map/rprecision.
+  significance: [mcnemar, paired_bootstrap]
+  bootstrap_iters: 10000
+  # true  = chuẩn hoá điểm về (0,1] trước khi chấm, để R@20/MRR chỉ phụ thuộc THỨ HẠNG.
+  # false = tái hiện đúng stark_qa gốc (điểm <= 0 bị loại khỏi R@20 và MRR).
+  # Xem cảnh báo ở đầu src/starkbench/eval.py. Báo cáo CẢ HAI ở bảng chính.
+  sanitize_scores: true
+
+scoring:
+  # Số candidate mỗi phương pháp phải chấm điểm.
+  # 129375 = chấm hết (cosine, BM25 full). Phương pháp local (traversal/diffusion/GNN)
+  # không thể chấm hết -> phải khai báo backfill.
+  full_ranking_required: true
+  backfill: cosine_no_rel     # none | cosine_no_rel | degree_prior
+  # LƯU Ý: stark_qa gốc chạy BM25 với k=100 (chỉ chấm top-100), nên MRR họ công bố
+  # thực chất là MRR@100. Ta chấm đầy đủ -> số của ta sẽ KHÁC paper một cách hợp lệ.
+
+embedding:
+  # Encode trên Kaggle T4x2 (data-parallel). Endpoint API không embed nổi corpus này.
+  #   primary   : ncbi/MedCPT           — bi-encoder retrieval y sinh, 109M, 512 tok
+  #   control   : facebook/contriever   — cùng họ với mFAR/MoR, cho phép so tuned/untuned
+  #   longctx   : Alibaba-NLP/gte-large-en-v1.5 — 8192 tok, single-vector.
+  #               Dù sao cũng phải encode cho SubgraphRAG => dùng luôn làm đối chứng
+  #               "chunking 512" vs "context dài 8192", gần như miễn phí.
+  encoders:
+    primary: ncbi/MedCPT
+    control: facebook/contriever
+    longctx: Alibaba-NLP/gte-large-en-v1.5
+  model: ${env:EMBED_MODEL}
+  dim: ${env:EMBED_DIM}
+  normalize: true             # L2-normalize -> dot product == cosine.
+                              # stark_qa VSS dùng dot product THÔ (torch.matmul), không
+                              # normalize. Ta chọn cosine vì user yêu cầu "cosine similarity".
+  batch_size: 64
+  cache_dir: .cache/emb
+
+llm:
+  model: ${env:LLM_MODEL}
+  temperature: 0.0
+  max_retries: 5
+  seed: 42
+
+run:
+  seed: 42
+  results_root: results
+  # Mọi lần chạy ghi ra results/<method>/<variant>/<split>/
+  #   predictions.parquet  (query_id, node_id, score) — chỉ lưu top-1000 để giữ file nhỏ
+  #   metrics.json         (4 metric + biến thể sanitize + breakdown theo nhóm)
+  #   manifest.json        (git sha, config đầy đủ, thời gian chạy, chi phí API, phần cứng)
+  # Không có manifest.json thì kết quả coi như không hợp lệ.
+
+analysis:
+  # Tách metric theo nhóm để không quy sai nguyên nhân cải thiện. Xem docs/EDA.md §4.
+  breakdowns:
+    - all
+    - answers_with_text      # đáp án thuộc disease/gene-protein/drug/pathway
+    - answers_without_text   # 12.1% query có TOÀN BỘ đáp án không có text
+    - single_answer          # 62.6% query
+    - multi_answer
+    - by_answer_node_type
