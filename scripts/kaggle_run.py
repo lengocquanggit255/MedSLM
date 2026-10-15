@@ -93,7 +93,7 @@ def status_of(user, key, slug, tries=3):
     return "UNKNOWN"
 
 
-def account_busy(user, key, prefix="stark-"):
+def account_busy(user, key, prefix=("stark-", "ritek-")):
     """True nếu account đang có kernel GPU chạy (Kaggle chỉ cho 1 cùng lúc).
 
     CHỈ kiểm các kernel do benchmark này tạo (`prefix`). Trước đây quét toàn bộ kernel
