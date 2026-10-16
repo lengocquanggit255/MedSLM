@@ -1,0 +1,3 @@
+[{"slug": "ritek-bgem3-smoke", "code": "ritek/kaggle/bgem3_encode/bgem3_encode.py",
+  "args": {"VAR": "add_rel", "SMOKE": "1", "CODE_SHA": "uncommitted-smoke"},
+  "datasets": ["stark-prime-corpus"], "accounts": ["minhlon192"], "timeout": 3600}]
