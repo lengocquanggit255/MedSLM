@@ -21,6 +21,15 @@ con của STaRK train, nên cả hai lấy từ `cache/prime/path/train_20250222
 Bản vá vào repo gốc: giống mor_run.py (import Planner lười, load_skb có root, stub module không
 dùng, assert khớp vị trí cache kế hoạch) + lọc split RiTeK + wandb no-op + num_workers=2.
 
+SAI LỆCH có chủ ý (adapted) — `batch_evaluator` của Reranking/train_eval_path_prime.py và rerank.py:
+  Code gốc khởi tạo `pred_matrix` = 0 cho mọi node rồi chỉ điền điểm của candidate. Reranker train
+  bằng cross-entropy nên dịch mọi điểm một hằng số không đổi loss, tức dấu của điểm là tùy. Điểm
+  candidate âm thì mọi node ngoài candidate (điểm 0) đứng trên chúng: val hit@1 = 0 ở mọi epoch,
+  `best_val_hit1 < hit1` chỉ đúng ở epoch 1, checkpoint "best" = epoch 1 (smoke abe23ee: điểm rerank
+  -3.07..-0.91, val hit@1 0.0 cả 2 epoch). Checkpoint tác giả công bố có điểm dương nên không lộ lỗi.
+  Sửa: khởi tạo -inf -> chỉ xếp hạng trong candidate, đúng ý "chọn theo val hit@1". Bộ chấm chỉ
+  dùng max/topk/sort/chỉ mục trên pred_matrix nên -inf an toàn. Số cuối vẫn chấm bằng harness.
+
 Dataset: mor-package (code MoR) · ritek-mor-data (ritek/scripts/prep_mor_data.py).
 SMOKE=1: LIMIT query mỗi split, 2 epoch.
 """
@@ -198,6 +207,10 @@ for f in ["eval.py", "Reranking/rerank.py", "Reranking/train_eval_path_prime.py"
         t = t.replace("skb = load_skb(dataset_name)",
                       f"skb = load_skb(dataset_name, root='{DATA_ROOT}', download_processed=True)")
         t = re.sub(r"num_workers=\d+", "num_workers=2", t)      # 32 dễ treo trên Kaggle
+        # node ngoài candidate = -inf, không phải 0 (xem docstring: chọn checkpoint)
+        _z = "pred_matrix = torch.zeros((scores_cand.shape[0],len(candidates_ids)))"
+        assert t.count(_z) == 1, f
+        t = t.replace(_z, "pred_matrix = torch.full((scores_cand.shape[0],len(candidates_ids)), float('-inf'))")
     if f == "Reranking/rerank.py":
         old = '    print(f"Results: {avg_results}")'
         assert t.count(old) == 1
