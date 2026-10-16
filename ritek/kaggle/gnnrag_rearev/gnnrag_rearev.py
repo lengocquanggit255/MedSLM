@@ -30,8 +30,9 @@ THAY ĐỔI VÒNG TRAIN (không ảnh hưởng chọn mô hình — vẫn theo d
   - Micro-batch + cộng dồn gradient khi batch 8 không vừa VRAM: loss gốc chia cho batch nên nhân lại
     hệ số len(micro)/len(batch) ⇒ cùng gradient trước clip/step.
   - Dừng train khi chạm DEADLINE_H (phiên Kaggle tối đa 12h), dùng checkpoint dev-H1 tốt nhất.
-  - CHẠY TIẾP qua nhiều phiên (quyết định 2026-10-16: không giảm số epoch). Cuối mỗi phiên lưu
-    rearev_state.pt = model + Adam + epoch + best_h1/f1 + RNG numpy/torch. RESUME=1 nạp lại từ
+  - CHẠY TIẾP qua nhiều phiên (quyết định 2026-10-16: không giảm số epoch). Sau MỖI epoch lưu
+    rearev_state.pt = model + Adam + epoch + best_h1/f1 + lịch sử + RNG numpy/torch (phiên bị cắt
+    giữa chừng vì hết quota/thời gian chỉ mất epoch dở). RESUME=1 nạp lại từ
     dataset chứa output phiên trước ⇒ nối tiếp y như chạy liền (kiểm: ritek/scripts/test_rearev_resume.py).
     Phiên đầu (code 7011a10) chưa lưu state: lần nối đầu chỉ nạp trọng số rearev-final.ckpt, Adam
     khởi tạo lại (meta ghi resume_mode).
@@ -40,6 +41,7 @@ THAY ĐỔI VÒNG TRAIN (không ảnh hưởng chọn mô hình — vẫn theo d
 · rearev_meta.json · rearev-h1.ckpt · rearev-f1.ckpt · rearev-final.ckpt · rearev_state.pt
 · rearev_history.json (cộng dồn mọi phiên) · log. Query test KHÔNG có topic không được chấm (Q8: backfill).
 """
+import copy
 import glob
 import json
 import math
@@ -47,6 +49,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 import numpy as np
@@ -109,6 +112,12 @@ class FullKG:
         B = dist.size(0)
         S = torch.sparse.mm(M, dist.t().contiguous())       # (V·R, B)
         return S.view(self.V, self.R, B).permute(2, 0, 1)
+
+    def to(self, device):
+        """Cùng KG trên thiết bị khác (cho bản sao model trên GPU thứ hai)."""
+        kg = copy.copy(self)
+        kg.M_fwd, kg.M_inv, kg.C = self.M_fwd.to(device), self.M_inv.to(device), self.C.to(device)
+        return kg
 
 
 # ============================================================ bản vá tính toán (tương đương)
@@ -301,6 +310,153 @@ class FullKGLoader:
         return [self.rows[i]["query"] for i in self.sample_ids]
 
 
+# ============================================================ train song song 2 GPU (cùng gradient)
+# Batch 8 không vừa một T4 nên vốn đã tách micro-batch rồi cộng dồn gradient. Ở đây các micro-batch
+# chạy ĐỒNG THỜI trên các GPU: mỗi GPU một bản sao model + KG; gradient bản sao cộng vào model chính
+# theo đúng thứ tự micro-batch; optimizer chỉ chạy trên model chính rồi chép trọng số sang bản sao.
+# Phép tính y hệt bản tuần tự (kiểm: ritek/scripts/test_rearev_dual.py trên CPU; check_dual trên GPU
+# thật mỗi đầu phiên, lệch thì quay về 1 GPU).
+
+def make_replica(build_model, src, device):
+    """Bản sao `src` trên `device`: dựng mới (không chép tensor tạm của forward cũ) rồi nạp trọng số.
+
+    Ngoài tham số/buffer, model gốc giữ tensor THƯỜNG (vd rel_texts, rel_features do encode_rel_texts
+    tính lúc khởi tạo) — `.to()` không chuyển chúng. Chép đúng các tensor đó từ `src` sang bản sao rồi
+    chuyển thiết bị; thuộc tính `device` của module (nơi model gốc chuyển input) cũng đổi theo.
+    """
+    rep = build_model()
+    rep.load_state_dict(src.state_dict())
+    for m_src, m_rep in zip(src.modules(), rep.modules()):
+        assert type(m_src) is type(m_rep)
+        for k, v in list(vars(m_rep).items()):
+            if isinstance(v, torch.Tensor):
+                v_src = vars(m_src).get(k)
+                setattr(m_rep, k, v_src.detach().clone().to(device) if isinstance(v_src, torch.Tensor) else v.to(device))
+        if isinstance(vars(m_rep).get("device"), torch.device):    # thuộc tính thường, không phải property của HF
+            m_rep.device = device
+    return rep.to(device)
+
+
+def _part(batch, s, micro, kg):
+    return tuple(kg if isinstance(x, FullKG) else (x if x is None else x[s:s + micro]) for x in batch)
+
+
+def parallel_backward(workers, batch, micro):
+    """Forward + backward mọi micro-batch của `batch`; micro-batch k chạy trên workers[k % n].
+
+    workers = [(model, kg), ...], workers[0] là model chính. Loss micro nhân len(micro)/len(batch) như
+    bản tuần tự. Trả (loss có trọng số từng micro, h1, f1) theo thứ tự micro-batch; gradient dồn về
+    workers[0].
+    """
+    B = batch[0].shape[0]
+    starts = list(range(0, B, micro))
+    out = [None] * len(starts)
+    errors = []
+
+    def work(w):
+        model, kg = workers[w]
+        dev = kg.C.device
+        if dev.type == "cuda":
+            torch.cuda.set_device(dev)
+        try:
+            for k in range(w, len(starts), len(workers)):
+                part = _part(batch, starts[k], micro, kg)
+                loss, _, _, tp = model(part, training=True)
+                wgt = part[0].shape[0] / B
+                (loss * wgt).backward()
+                out[k] = (loss.item() * wgt, tp[0], tp[1])
+        except Exception as e:  # noqa: BLE001 — trả lỗi về luồng chính
+            errors.append(e)
+
+    if len(workers) == 1:
+        work(0)
+    else:
+        th = [threading.Thread(target=work, args=(w,)) for w in range(len(workers))]
+        for t in th:
+            t.start()
+        for t in th:
+            t.join()
+    if errors:
+        raise errors[0]
+    main = workers[0][0]
+    for rep, _ in workers[1:]:                  # cộng gradient bản sao vào model chính
+        for (n0, p0), (n1, p1) in zip(main.named_parameters(), rep.named_parameters()):
+            assert n0 == n1, (n0, n1)
+            if p1.grad is not None:
+                g = p1.grad.to(p0.device)
+                p0.grad = g if p0.grad is None else p0.grad.add_(g)
+                p1.grad = None
+    return out
+
+
+@torch.no_grad()
+def sync_params(workers):
+    """Chép trọng số học được của model chính sang các bản sao (sau optimizer.step)."""
+    main = workers[0][0]
+    for rep, _ in workers[1:]:
+        for p0, p1 in zip(main.parameters(), rep.parameters()):
+            if p0.requires_grad:
+                p1.copy_(p0)
+
+
+def _rng_state():
+    return (np.random.get_state(), torch.get_rng_state(),
+            torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None)
+
+
+def _set_rng_state(st):
+    np.random.set_state(st[0])
+    torch.set_rng_state(st[1])
+    if st[2] is not None:
+        torch.cuda.set_rng_state_all(st[2])
+
+
+def check_dual(workers, batch, micro, n_time=3, loader=None, batch_size=None):
+    """So gradient đường song song với đường tuần tự trên model chính (dropout tắt) + đo thời gian.
+
+    Không đụng trạng thái ngẫu nhiên và không đổi trọng số (chỉ forward/backward rồi xoá gradient).
+    """
+    st = _rng_state()
+    models = [m for m, _ in workers]
+    for m in models:
+        m.eval()
+    for m in models:
+        m.zero_grad(set_to_none=True)
+    parallel_backward(workers[:1], batch, micro)
+    ref = {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
+    for m in models:
+        m.zero_grad(set_to_none=True)
+    parallel_backward(workers, batch, micro)
+    got = {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
+    assert set(ref) == set(got), set(ref) ^ set(got)
+    worst = 0.0
+    for n in ref:
+        d = float((ref[n] - got[n]).abs().max())
+        scale = float(ref[n].abs().max())
+        worst = max(worst, d / max(scale, 1e-12) if d > 1e-9 else 0.0)
+    timing = {}
+    if loader is not None:
+        for m in models:
+            m.train()
+        for name, ws in (("1gpu", workers[:1]), ("dual", workers)):
+            for d in range(torch.cuda.device_count()):
+                torch.cuda.synchronize(d)
+            t0 = time.time()
+            n_b = max(1, math.ceil(loader.num_data / batch_size))
+            for it in range(n_time):
+                parallel_backward(ws, loader.get_batch(it % n_b, batch_size, 0.0), micro)
+                for m in models:
+                    m.zero_grad(set_to_none=True)
+            for d in range(torch.cuda.device_count()):
+                torch.cuda.synchronize(d)
+            timing[name] = round((time.time() - t0) / n_time, 3)
+    for m in models:
+        m.zero_grad(set_to_none=True)
+        m.train()
+    _set_rng_state(st)
+    return worst, timing
+
+
 # ====================================================================== kernel (Kaggle)
 def find_ds(must_have):
     for depth in range(1, 5):
@@ -336,6 +492,7 @@ def main():
     MICRO = int(os.environ.get("MICRO", str(BATCH)))
     TEST_BATCH = int(os.environ.get("TEST_BATCH", "4"))
     RESUME = os.environ.get("RESUME", "0") == "1"
+    DUAL = os.environ.get("DUAL_GPU", "1") == "1" and torch.cuda.device_count() >= 2
     SESSION_EPOCHS = int(os.environ.get("SESSION_EPOCHS", "0"))   # >0: dừng sau n epoch (chỉ để kiểm resume)
     os.makedirs(OUT, exist_ok=True)
     gnn_dir = fetch_repo(os.environ.get("REPO_DIR", "/kaggle/temp/GNN-RAG"))
@@ -382,27 +539,24 @@ def main():
             self.rel_texts, self.rel_texts_inv = rt, rti
 
         def train_epoch(self):
-            """= train_epoch gốc; batch tách micro-batch, loss nhân len(micro)/len(batch)."""
-            self.model.train()
+            """= train_epoch gốc; batch tách micro-batch (song song trên các GPU trong self.workers),
+            loss nhân len(micro)/len(batch)."""
+            for m, _ in self.workers:
+                m.train()
             self.train_data.reset_batches(is_sequential=False)
             losses, h1_all, f1_all = [], [], []
             for it in range(math.ceil(self.train_data.num_data / self.args["batch_size"])):
                 batch = self.train_data.get_batch(it, self.args["batch_size"], self.args["fact_drop"])
-                B = batch[0].shape[0]
                 self.optim_model.zero_grad()
-                tot = 0.0
-                for s in range(0, B, self.micro):
-                    part = tuple(x if isinstance(x, FullKG) or x is None else x[s:s + self.micro] for x in batch)
-                    loss, _, _, tp = self.model(part, training=True)
-                    w = part[0].shape[0] / B
-                    (loss * w).backward()
-                    tot += loss.item() * w
-                    h1_all.extend(tp[0])
-                    f1_all.extend(tp[1])
+                out = parallel_backward(self.workers, batch, self.micro)
+                for _, h1, f1 in out:
+                    h1_all.extend(h1)
+                    f1_all.extend(f1)
                 torch.nn.utils.clip_grad_norm_([p for _, p in self.model.named_parameters()],
                                                self.args["gradient_clip"])
                 self.optim_model.step()
-                losses.append(tot)
+                sync_params(self.workers)
+                losses.append(sum(x[0] for x in out))
             return np.mean(losses), [0, 0], h1_all, f1_all
 
         def train(self, start_epoch, end_epoch):
@@ -431,6 +585,7 @@ def main():
                             self.save_ckpt("f1")
                 self.history.append(rec)
                 n_sess += 1
+                self.save_state(epoch + 1)                    # state trước, lịch sử sau: state là gốc khi nối
                 json.dump(self.history, open(f"{OUT}/rearev_history.json", "w"), indent=1)
                 spent = (time.time() - t_start) / 3600
                 per_epoch = spent / n_sess
@@ -442,14 +597,16 @@ def main():
                     self.stopped_by_deadline = epoch + 1
                     break
             self.save_ckpt("final")
-            self.save_state(self.history[-1]["epoch"] if self.history else 0)
 
         def save_state(self, epoch_done):
+            tmp = f"{OUT}/rearev_state.pt.tmp"            # ghi tạm rồi đổi tên: không để file dở dang
             torch.save({"model": self.model.state_dict(), "optim": self.optim_model.state_dict(),
                         "epoch": epoch_done, "best_h1": self.best_h1, "best_f1": self.best_f1,
+                        "history": list(self.history),
                         "np_rng": np.random.get_state(), "torch_rng": torch.get_rng_state(),
                         "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None},
-                       f"{OUT}/rearev_state.pt")
+                       tmp)
+            os.replace(tmp, f"{OUT}/rearev_state.pt")
 
     # Micro-batch: thử BATCH nguyên, OOM thì chia đôi (cùng gradient, xem train_epoch).
     micro = MICRO
@@ -488,6 +645,7 @@ def main():
                 shutil.copy(f"{rd}/{f}", f"{OUT}/{f}")
         if os.path.exists(f"{rd}/rearev_state.pt"):
             st = torch.load(f"{rd}/rearev_state.pt", map_location="cpu", weights_only=False)
+            prev_hist = st.get("history", prev_hist)     # state là gốc (lịch sử json có thể đi trước 1 epoch)
             trainer.model.load_state_dict(st["model"])
             trainer.optim_model.load_state_dict(st["optim"])
             trainer.best_h1, trainer.best_f1, start_epoch = st["best_h1"], st["best_f1"], st["epoch"]
@@ -508,6 +666,36 @@ def main():
         assert prev_hist and prev_hist[-1]["epoch"] == start_epoch, (len(prev_hist), start_epoch)
         logger.info(f"CHẠY TIẾP từ {rd}: epoch {start_epoch}/{args.num_epoch} · {resume_mode} · "
                     f"best dev H1 {trainer.best_h1:.4f}")
+
+    # ---- song song 2 GPU: bản sao model + KG trên cuda:1, kiểm gradient trên GPU thật ----
+    trainer.workers = [(trainer.model, kg)]
+    dual_info = {"enabled": False}
+    if DUAL:
+        st = _rng_state()                                   # dựng model mới tiêu RNG -> trả lại nguyên
+        d1 = torch.device("cuda:1")
+        rep = make_replica(lambda: Trainer(args=vars(args), model_name="ReaRev", logger=logger).model,
+                           trainer.model, d1)
+        _set_rng_state(st)
+        workers = [(trainer.model, kg), (rep, kg.to(d1))]
+        b0 = loaders["train"].get_batch(0, args.batch_size, 0)
+        try:
+            worst, timing = check_dual(workers, b0, micro, loader=loaders["train"], batch_size=args.batch_size)
+        except Exception as e:  # noqa: BLE001 — lỗi đường 2 GPU thì quay về 1 GPU, không bỏ phiên
+            logger.info(f"2 GPU lỗi khi kiểm: {type(e).__name__}: {e}")
+            worst, timing = float("inf"), {"error": f"{type(e).__name__}: {e}"[:500]}
+            for m, _ in workers:
+                m.zero_grad(set_to_none=True)
+                m.train()
+            _set_rng_state(st)
+        ok = worst <= 1e-4
+        dual_info = {"enabled": ok, "grad_max_rel_diff": worst, "sec_per_batch": timing}
+        logger.info(f"2 GPU: gradient lệch tương đối tối đa {worst:.2e} -> {'DÙNG' if ok else 'KHÔNG dùng'}"
+                    f" · giây/batch {timing}")
+        if ok:
+            trainer.workers = workers
+        else:
+            del rep
+            torch.cuda.empty_cache()
 
     t_train = time.time()
     if start_epoch < args.num_epoch:
@@ -543,7 +731,7 @@ def main():
         "best_dev_h1": float(trainer.best_h1), "best_dev_f1": float(trainer.best_f1),
         "epochs_run": len(trainer.history), "stopped_by_deadline": trainer.stopped_by_deadline,
         "num_epoch": args.num_epoch, "done": bool(trainer.history) and trainer.history[-1]["epoch"] >= args.num_epoch,
-        "resume_mode": resume_mode, "start_epoch_this_session": start_epoch,
+        "resume_mode": resume_mode, "start_epoch_this_session": start_epoch, "dual_gpu": dual_info,
         "train_hours": round(train_h, 3), "total_hours": round((time.time() - t_start) / 3600, 3),
         "own_eval_test_best_h1": {"f1": float(test_f1), "h1": float(test_h1), "em": float(test_em)},
         "torch": torch.__version__, "gpu": torch.cuda.get_device_name(0) if args.use_cuda else "cpu",
