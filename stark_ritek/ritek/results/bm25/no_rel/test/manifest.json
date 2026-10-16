@@ -1,0 +1,26 @@
+{
+  "method": "bm25",
+  "variant": "no_rel",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "0ad4225",
+  "timestamp": "2026-10-16 00:05:12",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 73.12,
+  "config": {
+    "lib": "bm25s 0.3.11",
+    "k1": 1.5,
+    "b": 0.75,
+    "method": "lucene",
+    "tokenizer": "bm25s.tokenize m\u1eb7c \u0111\u1ecbnh",
+    "n_rel": null,
+    "base_variant": "no_rel",
+    "enrich": null,
+    "enrich_spec": null
+  },
+  "notes": "Ch\u1ea5m \u0111\u1ee7 129,375 candidate (stark_qa g\u1ed1c ch\u1ec9 ch\u1ea5m top-100)."
+}

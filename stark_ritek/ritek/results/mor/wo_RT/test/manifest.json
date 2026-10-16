@@ -1,0 +1,23 @@
+{
+  "method": "mor",
+  "variant": "wo_RT",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "0ad4225",
+  "timestamp": "2026-10-16 00:45:42",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 297.45,
+  "config": {
+    "stage": "eval.py (tr\u01b0\u1edbc reranker)",
+    "pred_file": "results/kaggle/stark-mor-wo-rt/mor_pred_test.pkl",
+    "backfill": "contriever_ft dot product, d\u1ecbch xu\u1ed1ng d\u01b0\u1edbi min(MoR)",
+    "emb_d": "results/kaggle/stark-mor-emb/candidate_emb.npy",
+    "emb_q": "results/kaggle/stark-mor-emb/query_emb_dict.pt",
+    "queries_without_pred": 0
+  },
+  "notes": "MoR ablation w/o RT: b\u1ecf b\u1ed5 sung top-mor_k m\u1ed7i l\u1edbp, gi\u1eef seed ban \u0111\u1ea7u."
+}

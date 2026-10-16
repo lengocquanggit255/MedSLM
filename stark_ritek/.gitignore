@@ -1,0 +1,34 @@
+# secrets
+env/.env
+*.key
+
+# data & artefacts
+.cache/
+**/predictions.parquet
+results/kaggle/
+ritek/outputs/
+data/ritek/
+share/
+*.npy
+*.npz
+*.pt
+*.pkl
+*.zip
+*.pth
+*.safetensors
+!data/stark/prime/processed/*.pkl
+
+# python
+__pycache__/
+*.pyc
+.venv*/
+venvs/
+*.egg-info/
+
+# misc
+.ipynb_checkpoints/
+.DS_Store
+
+# enrichment raw sources (lớn, tải lại được bằng scripts/enrich_download.py)
+data/enrich/sources/**/*
+!data/enrich/sources/manifest.json

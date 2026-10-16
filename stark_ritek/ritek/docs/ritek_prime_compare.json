@@ -1,0 +1,260 @@
+{
+  "kg": {
+    "n_edges": {
+      "stark": 8100498,
+      "ritek": 8100498
+    },
+    "identical_in_order": true,
+    "identical_as_multiset": true,
+    "edges_only_in_ritek": 0,
+    "edges_only_in_stark": 0,
+    "ritek_rel_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17
+    ],
+    "ritek_node_id_range": [
+      0,
+      129374
+    ],
+    "stark_num_nodes": 129375,
+    "ritek_has_node_text": false
+  },
+  "queries": {
+    "train": {
+      "n": 5052,
+      "n_unique_ids": 5052,
+      "instruction_rows": 5052,
+      "by_stark_split": {
+        "train": 5052
+      },
+      "answer_names_match": 13099,
+      "answer_names_total": 13099,
+      "answers_identical": 5052,
+      "instr_same_answers": 5052,
+      "instr_same_question": 5052,
+      "question_identical": 5052,
+      "topic_is_answer": 135,
+      "topic_name_in_question": 2159,
+      "topic_names_match": 5025,
+      "topics_total": 5025,
+      "n_topics_per_query": {
+        "0": 27,
+        "1": 5025
+      },
+      "topic_node_types": {
+        "disease": 1709,
+        "gene/protein": 1625,
+        "drug": 735,
+        "pathway": 266,
+        "effect/phenotype": 155,
+        "biological_process": 149,
+        "molecular_function": 133,
+        "anatomy": 127,
+        "cellular_component": 112,
+        "exposure": 14
+      },
+      "hop_topic_to_nearest_answer": {
+        "0": 135,
+        "1": 2367,
+        "2": 1419,
+        "3": 1104
+      },
+      "hop_topic_to_each_answer": {
+        "0": 135,
+        "1": 5494,
+        "2": 3986,
+        "3": 3428,
+        ">3": 23
+      },
+      "examples": {
+        "question_changed": [],
+        "answers_changed": [],
+        "answer_name_mismatch": [],
+        "topic_name_mismatch": [],
+        "far_topic": []
+      }
+    },
+    "test": {
+      "n": 2801,
+      "n_unique_ids": 2801,
+      "instruction_rows": 2801,
+      "by_stark_split": {
+        "test": 2801
+      },
+      "answer_names_match": 6910,
+      "answer_names_total": 6910,
+      "answers_identical": 2801,
+      "instr_same_answers": 2801,
+      "instr_same_question": 2801,
+      "question_identical": 2801,
+      "topic_is_answer": 92,
+      "topic_name_in_question": 1176,
+      "topic_names_match": 2783,
+      "topics_total": 2783,
+      "n_topics_per_query": {
+        "0": 18,
+        "1": 2783
+      },
+      "topic_node_types": {
+        "disease": 901,
+        "gene/protein": 853,
+        "drug": 413,
+        "pathway": 177,
+        "biological_process": 92,
+        "molecular_function": 87,
+        "anatomy": 85,
+        "cellular_component": 83,
+        "effect/phenotype": 74,
+        "exposure": 18
+      },
+      "hop_topic_to_nearest_answer": {
+        "0": 92,
+        "1": 1209,
+        "2": 786,
+        "3": 696
+      },
+      "hop_topic_to_each_answer": {
+        "0": 92,
+        "1": 2620,
+        "2": 2191,
+        "3": 1961,
+        ">3": 26
+      },
+      "examples": {
+        "question_changed": [],
+        "answers_changed": [],
+        "answer_name_mismatch": [],
+        "topic_name_mismatch": [],
+        "far_topic": []
+      }
+    }
+  },
+  "stark_coverage": {
+    "train": {
+      "n": 6162,
+      "in_ritek_train": 5052,
+      "in_ritek_test": 0,
+      "in_neither": 1110,
+      "kept_profile": {
+        "n": 5052,
+        "mean_n_answers": 2.6,
+        "single_answer_pct": 62.93,
+        "answer_type_pct": {
+          "disease": 33.69,
+          "gene/protein": 27.04,
+          "drug": 22.37,
+          "pathway": 7.38,
+          "anatomy": 3.62,
+          "effect/phenotype": 2.71,
+          "cellular_component": 1.94,
+          "biological_process": 1.13,
+          "exposure": 0.12
+        }
+      },
+      "dropped_profile": {
+        "n": 1110,
+        "mean_n_answers": 2.8,
+        "single_answer_pct": 57.57,
+        "answer_type_pct": {
+          "gene/protein": 33.33,
+          "drug": 21.44,
+          "disease": 16.4,
+          "anatomy": 7.75,
+          "effect/phenotype": 6.58,
+          "cellular_component": 5.41,
+          "pathway": 5.32,
+          "biological_process": 3.06,
+          "exposure": 0.72
+        }
+      }
+    },
+    "val": {
+      "n": 2241,
+      "in_ritek_train": 0,
+      "in_ritek_test": 0,
+      "in_neither": 2241,
+      "kept_profile": null,
+      "dropped_profile": {
+        "n": 2241,
+        "mean_n_answers": 2.48,
+        "single_answer_pct": 63.77,
+        "answer_type_pct": {
+          "disease": 31.24,
+          "gene/protein": 27.76,
+          "drug": 21.46,
+          "pathway": 7.41,
+          "anatomy": 4.33,
+          "effect/phenotype": 4.28,
+          "cellular_component": 2.1,
+          "biological_process": 1.12,
+          "exposure": 0.31
+        }
+      }
+    },
+    "test": {
+      "n": 2801,
+      "in_ritek_train": 0,
+      "in_ritek_test": 2801,
+      "in_neither": 0,
+      "kept_profile": {
+        "n": 2801,
+        "mean_n_answers": 2.47,
+        "single_answer_pct": 63.16,
+        "answer_type_pct": {
+          "disease": 31.17,
+          "gene/protein": 28.13,
+          "drug": 21.28,
+          "pathway": 7.46,
+          "anatomy": 4.0,
+          "effect/phenotype": 3.5,
+          "cellular_component": 2.61,
+          "biological_process": 1.61,
+          "exposure": 0.25
+        }
+      },
+      "dropped_profile": null
+    },
+    "test-0.1": {
+      "n": 280,
+      "in_ritek_train": 0,
+      "in_ritek_test": 280,
+      "in_neither": 0,
+      "kept_profile": {
+        "n": 280,
+        "mean_n_answers": 2.42,
+        "single_answer_pct": 64.29,
+        "answer_type_pct": {
+          "gene/protein": 31.07,
+          "disease": 28.93,
+          "drug": 18.93,
+          "pathway": 6.43,
+          "anatomy": 5.36,
+          "effect/phenotype": 4.29,
+          "cellular_component": 3.57,
+          "biological_process": 1.43
+        }
+      },
+      "dropped_profile": null
+    },
+    "human_generated_eval": {
+      "n": 98,
+      "in_ritek_by_text": 0
+    }
+  }
+}
