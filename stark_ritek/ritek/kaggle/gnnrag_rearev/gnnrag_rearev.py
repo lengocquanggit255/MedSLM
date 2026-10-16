@@ -492,6 +492,7 @@ def main():
     MICRO = int(os.environ.get("MICRO", str(BATCH)))
     TEST_BATCH = int(os.environ.get("TEST_BATCH", "4"))
     RESUME = os.environ.get("RESUME", "0") == "1"
+    RESUME_EPOCH = os.environ.get("RESUME_EPOCH")    # epoch phiên trước đã xong — chặn nạp nhầm bản cũ
     DUAL = os.environ.get("DUAL_GPU", "1") == "1" and torch.cuda.device_count() >= 2
     SESSION_EPOCHS = int(os.environ.get("SESSION_EPOCHS", "0"))   # >0: dừng sau n epoch (chỉ để kiểm resume)
     os.makedirs(OUT, exist_ok=True)
@@ -664,6 +665,7 @@ def main():
             np.random.seed(args.seed + start_epoch)
             resume_mode = "weights_only (Adam khởi tạo lại)"
         assert prev_hist and prev_hist[-1]["epoch"] == start_epoch, (len(prev_hist), start_epoch)
+        assert RESUME_EPOCH is None or int(RESUME_EPOCH) == start_epoch,             f"output phiên trước ở epoch {start_epoch}, kỳ vọng {RESUME_EPOCH} (dataset chưa lên bản mới?)"
         logger.info(f"CHẠY TIẾP từ {rd}: epoch {start_epoch}/{args.num_epoch} · {resume_mode} · "
                     f"best dev H1 {trainer.best_h1:.4f}")
 
