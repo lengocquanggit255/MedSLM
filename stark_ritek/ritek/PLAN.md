@@ -41,6 +41,7 @@ Harness dùng chung: `src/starkbench/`. Script dùng chung có cờ `--dataset r
 | — | **Full test là kết quả chính.** Số trên `test-0.1` cắt từ `per_query.parquet` của run full test. | 10-16 |
 | — | **Git**: commit local các file của lần chạy này (harness `src/starkbench/`, script dùng chung, `ritek/`). Remote: nhánh `stark-ritek` của MedSLM = `origin/main` + `git subtree add --prefix=stark_ritek master`; cập nhật bằng `git subtree merge --prefix=stark_ritek master` trong một worktree. Không đụng `main`, `ming`. | 10-16 |
 | — | SubgraphRAG: text đưa vào gte = **tên** node, tên quan hệ, câu hỏi, đúng code gốc (`text_entity_list`, `relation_list`). Lần chạy STaRK dùng embedding doc MedCPT add_rel. Subgraph PPR-2000 (alpha 0.85, 20 vòng) như lần STaRK, seed = topic RiTeK. | 10-16 |
+| — | **MoR reranker train lại — adapted:** `batch_evaluator` gốc gán điểm 0 cho node ngoài candidate. Điểm reranker train lại có thể âm hết (loss cross-entropy không phụ thuộc dấu), khi đó val hit@1 = 0 mọi epoch và checkpoint "best" kẹt ở epoch 1. Sửa: node ngoài candidate = −inf (`ritek/kaggle/mor_ritek`). Run `abe23ee` bị lỗi này, không dùng. | 10-16 |
 | — | MoR-prime chỉ dùng Contriever-FT ở **một** chỗ: `scorer` (dot product embedding tính sẵn). Điểm này vừa chọn top-100 candidate vừa là một cột feature của reranker. Text retriever của MoR-prime là BM25. Nên MoR+BGE-M3 = thay hai dict embedding của scorer (doc no_rel, như Contriever), BM25 giữ nguyên. | 10-16 |
 
 ## 3. Metric — một định nghĩa cho mọi phương pháp
