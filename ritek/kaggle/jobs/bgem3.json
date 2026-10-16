@@ -1,0 +1,4 @@
+[{"slug": "ritek-bgem3-add-rel", "code": "ritek/kaggle/bgem3_encode/bgem3_encode.py",
+  "args": {"VAR": "add_rel", "CODE_SHA": "104433b"}, "datasets": ["stark-prime-corpus"], "timeout": 43200},
+ {"slug": "ritek-bgem3-no-rel", "code": "ritek/kaggle/bgem3_encode/bgem3_encode.py",
+  "args": {"VAR": "no_rel", "CODE_SHA": "104433b"}, "datasets": ["stark-prime-corpus"], "timeout": 43200}]

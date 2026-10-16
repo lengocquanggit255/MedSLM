@@ -1,6 +1,7 @@
 # Kế hoạch: chạy lại benchmark trên STaRK-Prime bản RiTeK
 
-Trạng thái (2026-10-16): **P0, P1 xong. P4 (GNN-RAG A+) đang chạy trên Kaggle** (`ritek-gnnrag-rearev`, account minhduonngg, code 7011a10).
+Trạng thái (2026-10-16): **P0, P1 xong.** P2 xong. Đang chạy trên Kaggle: P4 GNN-RAG A+ (`ritek-gnnrag-rearev`, minhduonngg, code 7011a10). P3, P5: đang smoke.
+Pha GPU P2–P5 được duyệt trước: smoke đạt thì tự đẩy bản full; smoke có vấn đề thì chờ duyệt (2026-10-16).
 So sánh dữ liệu: [docs/ritek_prime_compare.json](docs/ritek_prime_compare.json) (`scripts/eda_ritek_prime.py`).
 
 Mọi thứ của lần chạy này nằm trong `ritek/`:
@@ -38,7 +39,9 @@ Harness dùng chung: `src/starkbench/`. Script dùng chung có cờ `--dataset r
 | Q8 | Query không có topic: GNN-RAG/SubgraphRAG **chỉ dùng điểm backfill**, n_native = 0. Mẫu số vẫn là toàn bộ split. | 10-15 |
 | — | SubgraphRAG dùng encoder **`gte-large-en-v1.5`** như paper (lần chạy trên STaRK đã dùng MedCPT, là một sai lệch). | 10-16 |
 | — | **Full test là kết quả chính.** Số trên `test-0.1` cắt từ `per_query.parquet` của run full test. | 10-16 |
-| — | **Git**: commit local các file của lần chạy này (harness `src/starkbench/`, script dùng chung, `ritek/`). Chỉ đẩy những file đó lên remote, trong thư mục con riêng. | 10-16 |
+| — | **Git**: commit local các file của lần chạy này (harness `src/starkbench/`, script dùng chung, `ritek/`). Remote: nhánh `stark-ritek` của MedSLM = `origin/main` + `git subtree add --prefix=stark_ritek master`; cập nhật bằng `git subtree merge --prefix=stark_ritek master` trong một worktree. Không đụng `main`, `ming`. | 10-16 |
+| — | SubgraphRAG: text đưa vào gte = **tên** node, tên quan hệ, câu hỏi, đúng code gốc (`text_entity_list`, `relation_list`). Lần chạy STaRK dùng embedding doc MedCPT add_rel. Subgraph PPR-2000 (alpha 0.85, 20 vòng) như lần STaRK, seed = topic RiTeK. | 10-16 |
+| — | MoR-prime chỉ dùng Contriever-FT ở **một** chỗ: `scorer` (dot product embedding tính sẵn). Điểm này vừa chọn top-100 candidate vừa là một cột feature của reranker. Text retriever của MoR-prime là BM25. Nên MoR+BGE-M3 = thay hai dict embedding của scorer (doc no_rel, như Contriever), BM25 giữ nguyên. | 10-16 |
 
 ## 3. Metric — một định nghĩa cho mọi phương pháp
 
@@ -92,10 +95,10 @@ Kết quả rà soát (2026-10-15):
 |---|---|---|---|
 | P0 | harness | — | ✅ xong 2026-10-16 |
 | P1 | chấm lại BM25, MedCPT, Contriever-FT, MoR | rerank MoR trên CPU 6.6 phút | ✅ 11 run, metric cũ Δ = 0 so với STaRK |
-| P2 | BGE-M3 | MedCPT 7–15 phút/biến thể | 31.1M / 78.7M token. **Probe** trước. |
-| P3 | SubgraphRAG (+ encode gte-large) | `none` 2.6h · `sqrt` 8.2h | |
+| P2 | BGE-M3 | MedCPT 7–15 phút/biến thể | ✅ encode no_rel 18 phút, add_rel 47 phút (T4x2). Test: add_rel_max H@1 12.07 · R@20 31.32 · MRR 19.59; no_rel H@1 11.21 · R@20 29.05 · MRR 18.20. 4 run trong `ritek/results/cosine_bgem3/` |
+| P3 | SubgraphRAG (+ encode gte-large) | `none` 2.6h · `sqrt` 8.2h | Dữ liệu: `ritek/scripts/prep_sgrag_data.py`. Kernel `ritek/kaggle/sgrag` gọi lại nguyên văn kernel train STaRK. Chờ smoke. |
 | P4 | GNN-RAG A+ | 36–80 phút trên PPR-2000 | ✅ trùng số với code gốc (`test_rearev_equivalence.py`). 🔄 đang train, hạn 11h |
-| P5 | MoR + BGE-M3 và đối chứng | traversal test ~11 phút | |
+| P5 | MoR + BGE-M3 và đối chứng | traversal test ~11 phút | Kernel `ritek/kaggle/mor_ritek` (`SCORER=contriever|bgem3`), dữ liệu `ritek/scripts/prep_mor_data.py` (cần P2 no_rel). Chờ smoke. |
 | P6 | ARK | — | để sau |
 
 Mỗi pha cần GPU: smoke test → probe → bảng ước lượng đo thật → chờ duyệt → chạy.
