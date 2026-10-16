@@ -1,0 +1,8 @@
+[{"slug": "ritek-sgrag-sqrt", "code": "ritek/kaggle/sgrag/sgrag.py",
+  "args": {"POSW": "sqrt", "EMB_SIZE": "1024", "MAX_EPOCH": "50", "PATIENCE": "10", "MAX_EDGES": "100000",
+           "CODE_SHA": "9dcbbde"},
+  "datasets": ["ritek-sgrag-data"], "accounts": ["minhlon192", "minhduonngg"], "timeout": 43200},
+ {"slug": "ritek-sgrag-none", "code": "ritek/kaggle/sgrag/sgrag.py",
+  "args": {"POSW": "none", "EMB_SIZE": "1024", "MAX_EPOCH": "50", "PATIENCE": "10", "MAX_EDGES": "100000",
+           "CODE_SHA": "9dcbbde"},
+  "datasets": ["ritek-sgrag-data"], "accounts": ["minhlon192", "minhduonngg"], "timeout": 43200}]
