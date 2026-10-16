@@ -126,7 +126,7 @@ def quota_left(user, key):
 
 
 def push(user, key, job, workdir: Path):
-    """Dựng thư mục kernel rồi push. `job` gồm: slug, code, args(dict)."""
+    """Dựng thư mục kernel rồi push. `job` gồm: slug, code, args(dict), datasets, kernels (tuỳ chọn)."""
     d = workdir / job["slug"]
     if d.exists():
         shutil.rmtree(d)
@@ -144,7 +144,9 @@ def push(user, key, job, workdir: Path):
         "enable_internet": "true",
         "machine_shape": "NvidiaTeslaT4",          # BẮT BUỘC để được T4x2
         "dataset_sources": [f"{user}/{s}" for s in job.get("datasets", [])],
-        "competition_sources": [], "kernel_sources": [], "model_sources": [],
+        # output của kernel khác (cùng account) gắn làm input, vd phiên trước của một job chạy nhiều phiên
+        "competition_sources": [], "kernel_sources": [f"{user}/{s}" for s in job.get("kernels", [])],
+        "model_sources": [],
     }
     (d / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     code, out = kag(user, key, "kernels", "push", "-p", str(d),
