@@ -93,18 +93,27 @@ class SubgraphRAGRetriever(nn.Module):
         parts.append(dde)
         return torch.cat(parts, dim=-1)
 
-    def forward(self, q_emb, node_emb, rel_emb, src, dst, rel, seed_mask):
-        """Trả logit cho TỪNG cạnh. q_emb (lm,) · node_emb (n_v, lm) · rel_emb (R, lm)."""
+    def forward(self, q_emb, node_emb, rel_emb, src, dst, rel, seed_mask, edge_chunk=None, dde=None):
+        """Trả logit cho TỪNG cạnh. q_emb (lm,) · node_emb (n_v, lm) · rel_emb (R, lm).
+
+        edge_chunk: chấm cạnh theo khúc để giới hạn bộ nhớ (n_e × emb), kết quả y hệt.
+        Cần khi suy luận trên TOÀN BỘ cạnh của subgraph (p99 ~1.7M cạnh: 7 GB nếu làm một lần).
+        dde: DDE tính sẵn trên TOÀN subgraph (không có tham số học). Truyền vào khi chỉ chấm một
+        tập con cạnh, để cấu trúc mà mô hình thấy vẫn là subgraph đầy đủ.
+        """
         n_v = node_emb.shape[0]
-        dde = compute_dde(n_v, src, dst, seed_mask,
-                          self.num_rounds, self.num_reverse_rounds)
+        if dde is None:
+            dde = compute_dde(n_v, src, dst, seed_mask,
+                              self.num_rounds, self.num_reverse_rounds)
         ef = self.entity_feat(node_emb, dde, seed_mask)      # (n_v, lm + extra)
         # tính sẵn theo NODE và theo QUAN HỆ, rồi chỉ gather + cộng cho từng cạnh
         ph, pt = self.Wh(ef), self.Wt(ef)                    # (n_v, emb)
         pr = self.Wr(rel_emb)                                # (R, emb)
-        pq = self.Wq(q_emb)                                  # (emb,)
-        z = pq.unsqueeze(0) + ph[src] + pr[rel] + pt[dst]    # (n_e, emb)
-        return self.out(F.relu(z)).squeeze(-1)               # (n_e,)
+        pq = self.Wq(q_emb).unsqueeze(0)                     # (1, emb)
+        step = edge_chunk or max(len(src), 1)
+        out = [self.out(F.relu(pq + ph[src[a:a + step]] + pr[rel[a:a + step]] + pt[dst[a:a + step]]))
+               for a in range(0, len(src), step)]            # mỗi khúc (step, emb)
+        return torch.cat(out).squeeze(-1) if out else pq.new_zeros(0)   # (n_e,)
 
 
 def triple_to_node_scores(n_v, src, dst, logits):

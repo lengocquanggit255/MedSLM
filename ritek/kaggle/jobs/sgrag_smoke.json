@@ -1,0 +1,4 @@
+[{"slug": "ritek-sgrag-smoke", "code": "ritek/kaggle/sgrag/sgrag.py",
+  "args": {"POSW": "sqrt", "EMB_SIZE": "1024", "MAX_EDGES": "100000", "LIMIT": "60", "MAX_EPOCH": "2",
+           "CODE_SHA": "uncommitted-smoke"},
+  "datasets": ["ritek-sgrag-data"], "timeout": 7200}]
