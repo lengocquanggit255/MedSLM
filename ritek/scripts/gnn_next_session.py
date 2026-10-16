@@ -24,7 +24,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from kaggle_run import ACCOUNTS, env, quota_left, status_of  # noqa: E402
+from kaggle_run import ACCOUNTS, env, kag, quota_left, status_of  # noqa: E402
 
 DEADLINE_H = 11.5
 RESUME_DS = "ritek-gnn-resume"
@@ -77,10 +77,15 @@ def main():
         time.sleep(a.poll)
     out_dir = ROOT / "ritek/outputs/kaggle" / a.prev
     meta_f = out_dir / "rearev_meta.json"
-    for _ in range(30):                 # dispatcher của phiên trước tải output về sau khi COMPLETE
-        if meta_f.exists() and (out_dir / "rearev_state.pt").exists():
+    have = lambda: meta_f.exists() and (out_dir / "rearev_state.pt").exists()  # noqa: E731
+    for _ in range(5):                  # dispatcher của phiên trước (nếu còn) tải output về sau khi COMPLETE
+        if have():
             break
         time.sleep(60)
+    if st == "COMPLETE" and not have():  # không ai tải (dispatcher đã dừng) -> tự tải
+        out_dir.mkdir(parents=True, exist_ok=True)
+        kag(a.prev_account, pkey, "kernels", "output", f"{a.prev_account}/{a.prev}", "-p", str(out_dir), timeout=3600)
+        print(f"đã tự tải output {a.prev} -> {out_dir}", flush=True)
     if st != "COMPLETE" or not meta_f.exists():
         sys.exit(f"{a.prev}: {st}, meta {'có' if meta_f.exists() else 'KHÔNG có'} -> dừng chuỗi, cần xem tay")
     meta = json.loads(meta_f.read_text(encoding="utf-8"))
