@@ -1,0 +1,3 @@
+[{"slug": "ritek-gnnrag-dual-smoke", "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
+  "args": {"SMOKE": "16", "NUM_EPOCH": "2", "BATCH": "8", "TEST_BATCH": "4", "CODE_SHA": "uncommitted-smoke"},
+  "datasets": ["ritek-gnn-data"], "accounts": ["tienthanhahihi"], "timeout": 7200}]
