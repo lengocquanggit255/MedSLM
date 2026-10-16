@@ -35,8 +35,10 @@ def main():
     meta = json.loads((run / f"subgraphrag_{args.posw}_meta.json").read_text(encoding="utf-8"))
     gte = json.loads((run / "gte_meta.json").read_text(encoding="utf-8"))
     d = np.load(run / f"subgraphrag_{args.posw}_test_pred.npz")
-    off = d["off"]
-    P = {int(q): (d["node_flat"][off[i]:off[i + 1]].astype(np.int64), d["score_flat"][off[i]:off[i + 1]])
+    # Đọc mỗi mảng MỘT lần: NpzFile giải nén lại cả mảng mỗi lần d[...], lát cắt lại giữ cả mảng đó
+    # -> trong vòng lặp 2,783 query là ~61 GB RAM.
+    off, nf, sf = d["off"], d["node_flat"], d["score_flat"]
+    P = {int(q): (nf[off[i]:off[i + 1]].astype(np.int64), sf[off[i]:off[i + 1]])
          for i, q in enumerate(d["qids"])}
 
     bq = np.load(f"{BACKFILL}/qids_test.npy")
