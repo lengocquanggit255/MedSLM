@@ -1,0 +1,6 @@
+[{"slug": "ritek-mor-bgem3", "code": "ritek/kaggle/mor_ritek/mor_ritek.py",
+  "args": {"SCORER": "bgem3", "CODE_SHA": "53b8416"}, "datasets": ["mor-package", "ritek-mor-data"],
+  "accounts": ["minhlon192", "minhduonngg"], "timeout": 43200},
+ {"slug": "ritek-mor-contriever", "code": "ritek/kaggle/mor_ritek/mor_ritek.py",
+  "args": {"SCORER": "contriever", "CODE_SHA": "53b8416"}, "datasets": ["mor-package", "ritek-mor-data"],
+  "accounts": ["minhlon192", "minhduonngg"], "timeout": 43200}]
