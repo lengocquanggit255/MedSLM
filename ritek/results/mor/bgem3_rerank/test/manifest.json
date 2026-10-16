@@ -1,0 +1,23 @@
+{
+  "method": "mor",
+  "variant": "bgem3_rerank",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "4e653cc",
+  "timestamp": "2026-10-16 11:39:09",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 357.03,
+  "config": {
+    "stage": "rerank.py (sau structure-aware reranker)",
+    "pred_file": "ritek/outputs/kaggle/ritek-mor-bgem3/mor_rerank_pred.pkl",
+    "backfill": "contriever_ft dot product, d\u1ecbch xu\u1ed1ng d\u01b0\u1edbi min(MoR)",
+    "emb_d": "ritek/outputs/kaggle_data/ritek-mor-data/bgem3/nodeemb_no_rel.npy",
+    "emb_q": "ritek/outputs/bgem3_query_emb_dict.pt",
+    "queries_without_pred": 0
+  },
+  "notes": "MoR + BGE-M3 (scorer), reranker train l\u1ea1i tr\u00ean RiTeK train/val, code 53b8416."
+}
