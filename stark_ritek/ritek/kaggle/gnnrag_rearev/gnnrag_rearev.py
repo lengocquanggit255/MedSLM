@@ -30,14 +30,21 @@ THAY ĐỔI VÒNG TRAIN (không ảnh hưởng chọn mô hình — vẫn theo d
   - Micro-batch + cộng dồn gradient khi batch 8 không vừa VRAM: loss gốc chia cho batch nên nhân lại
     hệ số len(micro)/len(batch) ⇒ cùng gradient trước clip/step.
   - Dừng train khi chạm DEADLINE_H (phiên Kaggle tối đa 12h), dùng checkpoint dev-H1 tốt nhất.
+  - CHẠY TIẾP qua nhiều phiên (quyết định 2026-10-16: không giảm số epoch). Cuối mỗi phiên lưu
+    rearev_state.pt = model + Adam + epoch + best_h1/f1 + RNG numpy/torch. RESUME=1 nạp lại từ
+    dataset chứa output phiên trước ⇒ nối tiếp y như chạy liền (kiểm: ritek/scripts/test_rearev_resume.py).
+    Phiên đầu (code 7011a10) chưa lưu state: lần nối đầu chỉ nạp trọng số rearev-final.ckpt, Adam
+    khởi tạo lại (meta ghi resume_mode).
 
 Đầu ra (/kaggle/working): rearev_test_scores.npy (n, 129375) float32 = pred_dist · rearev_test_qids.npy
-· rearev_meta.json · rearev-h1.ckpt · log. Query test KHÔNG có topic không được chấm (Q8: backfill).
+· rearev_meta.json · rearev-h1.ckpt · rearev-f1.ckpt · rearev-final.ckpt · rearev_state.pt
+· rearev_history.json (cộng dồn mọi phiên) · log. Query test KHÔNG có topic không được chấm (Q8: backfill).
 """
 import glob
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -328,6 +335,8 @@ def main():
     BATCH = int(os.environ.get("BATCH", "8"))
     MICRO = int(os.environ.get("MICRO", str(BATCH)))
     TEST_BATCH = int(os.environ.get("TEST_BATCH", "4"))
+    RESUME = os.environ.get("RESUME", "0") == "1"
+    SESSION_EPOCHS = int(os.environ.get("SESSION_EPOCHS", "0"))   # >0: dừng sau n epoch (chỉ để kiểm resume)
     os.makedirs(OUT, exist_ok=True)
     gnn_dir = fetch_repo(os.environ.get("REPO_DIR", "/kaggle/temp/GNN-RAG"))
     sys.path.insert(0, gnn_dir)
@@ -398,7 +407,8 @@ def main():
 
         def train(self, start_epoch, end_epoch):
             """= train gốc, bỏ chấm test mỗi lần eval; dừng khi chạm hạn giờ."""
-            self.history = []
+            self.history = list(prev_hist)
+            n_sess = 0
             for epoch in range(start_epoch, end_epoch + 1):
                 st = time.time()
                 loss, _, h1s, f1s = self.train_epoch()
@@ -420,14 +430,26 @@ def main():
                             self.best_f1 = ev_f1
                             self.save_ckpt("f1")
                 self.history.append(rec)
+                n_sess += 1
                 json.dump(self.history, open(f"{OUT}/rearev_history.json", "w"), indent=1)
                 spent = (time.time() - t_start) / 3600
-                per_epoch = spent / len(self.history)
-                if spent + 1.5 * per_epoch + 0.4 > DEADLINE_H:     # chừa chỗ cho suy luận test
+                per_epoch = spent / n_sess
+                if epoch < end_epoch and spent + 1.5 * per_epoch + 0.4 > DEADLINE_H:  # chừa chỗ suy luận test
                     self.logger.info(f"DỪNG theo hạn giờ: {spent:.2f}h sau {epoch + 1} epoch")
                     self.stopped_by_deadline = epoch + 1
                     break
+                if SESSION_EPOCHS and n_sess >= SESSION_EPOCHS:
+                    self.stopped_by_deadline = epoch + 1
+                    break
             self.save_ckpt("final")
+            self.save_state(self.history[-1]["epoch"] if self.history else 0)
+
+        def save_state(self, epoch_done):
+            torch.save({"model": self.model.state_dict(), "optim": self.optim_model.state_dict(),
+                        "epoch": epoch_done, "best_h1": self.best_h1, "best_f1": self.best_f1,
+                        "np_rng": np.random.get_state(), "torch_rng": torch.get_rng_state(),
+                        "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None},
+                       f"{OUT}/rearev_state.pt")
 
     # Micro-batch: thử BATCH nguyên, OOM thì chia đôi (cùng gradient, xem train_epoch).
     micro = MICRO
@@ -454,8 +476,44 @@ def main():
             micro //= 2
             logger.info(f"OOM -> micro-batch {micro}")
 
+    # ---- chạy tiếp từ phiên trước ----
+    start_epoch, prev_hist, resume_mode = 0, [], None
+    if RESUME:
+        hs = sorted(glob.glob("/kaggle/input/**/rearev_history.json", recursive=True))
+        rd = os.environ.get("RESUME_DIR") or (os.path.dirname(hs[0]) if hs else None)
+        assert rd, "RESUME=1 nhưng không thấy output phiên trước (rearev_history.json)"
+        prev_hist = json.load(open(f"{rd}/rearev_history.json"))
+        for f in ("rearev-h1.ckpt", "rearev-f1.ckpt"):         # best của các phiên trước
+            if os.path.exists(f"{rd}/{f}"):
+                shutil.copy(f"{rd}/{f}", f"{OUT}/{f}")
+        if os.path.exists(f"{rd}/rearev_state.pt"):
+            st = torch.load(f"{rd}/rearev_state.pt", map_location="cpu", weights_only=False)
+            trainer.model.load_state_dict(st["model"])
+            trainer.optim_model.load_state_dict(st["optim"])
+            trainer.best_h1, trainer.best_f1, start_epoch = st["best_h1"], st["best_f1"], st["epoch"]
+            np.random.set_state(st["np_rng"])
+            torch.set_rng_state(st["torch_rng"])
+            if st["cuda_rng"] is not None and torch.cuda.is_available():
+                torch.cuda.set_rng_state_all(st["cuda_rng"])
+            resume_mode = "full (model + Adam + RNG)"
+        else:
+            # phiên tạo bởi code cũ (7011a10): chỉ có trọng số cuối, không có Adam/RNG
+            trainer.load_ckpt(f"{rd}/rearev-final.ckpt")
+            start_epoch = prev_hist[-1]["epoch"]
+            dev = [h for h in prev_hist if "dev_h1" in h and h["epoch"] - 1 > trainer.warmup_epoch]
+            trainer.best_h1 = max([h["dev_h1"] for h in dev], default=0.0)
+            trainer.best_f1 = max([h["dev_f1"] for h in dev], default=0.0)
+            np.random.seed(args.seed + start_epoch)
+            resume_mode = "weights_only (Adam khởi tạo lại)"
+        assert prev_hist and prev_hist[-1]["epoch"] == start_epoch, (len(prev_hist), start_epoch)
+        logger.info(f"CHẠY TIẾP từ {rd}: epoch {start_epoch}/{args.num_epoch} · {resume_mode} · "
+                    f"best dev H1 {trainer.best_h1:.4f}")
+
     t_train = time.time()
-    trainer.train(0, args.num_epoch - 1)
+    if start_epoch < args.num_epoch:
+        trainer.train(start_epoch, args.num_epoch - 1)
+    else:
+        trainer.history = list(prev_hist)
     train_h = (time.time() - t_train) / 3600
 
     # Suy luận test bằng checkpoint dev-H1 tốt nhất (đúng evaluate_best gốc, mục h1).
@@ -484,6 +542,8 @@ def main():
         "kg": {"nodes": kg.V, "facts_incl_self_loop": kg.num_fact, "R_incl_self_loop": kg.R},
         "best_dev_h1": float(trainer.best_h1), "best_dev_f1": float(trainer.best_f1),
         "epochs_run": len(trainer.history), "stopped_by_deadline": trainer.stopped_by_deadline,
+        "num_epoch": args.num_epoch, "done": bool(trainer.history) and trainer.history[-1]["epoch"] >= args.num_epoch,
+        "resume_mode": resume_mode, "start_epoch_this_session": start_epoch,
         "train_hours": round(train_h, 3), "total_hours": round((time.time() - t_start) / 3600, 3),
         "own_eval_test_best_h1": {"f1": float(test_f1), "h1": float(test_h1), "em": float(test_em)},
         "torch": torch.__version__, "gpu": torch.cuda.get_device_name(0) if args.use_cuda else "cpu",

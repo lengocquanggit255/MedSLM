@@ -1,6 +1,6 @@
 # Kế hoạch: chạy lại benchmark trên STaRK-Prime bản RiTeK
 
-Trạng thái (2026-10-16): **P0, P1 xong.** P2 xong. Đang chạy trên Kaggle: P4 GNN-RAG A+ (`ritek-gnnrag-rearev`, minhduonngg, code 7011a10). P3, P5: đang smoke.
+Trạng thái (2026-10-16): **P0, P1 xong.** P2 xong. P5 MoR+BGE-M3 xong. Đang chạy trên Kaggle: P4 GNN-RAG A+ phiên 2 (`ritek-gnnrag-rearev-s2`, minhduonngg), P3 `ritek-sgrag-sqrt` (minhlon192). Xếp hàng trên minhlon192: `ritek-mor-contriever`, `ritek-sgrag-none`.
 Pha GPU P2–P5 được duyệt trước: smoke đạt thì tự đẩy bản full; smoke có vấn đề thì chờ duyệt (2026-10-16).
 So sánh dữ liệu: [docs/ritek_prime_compare.json](docs/ritek_prime_compare.json) (`scripts/eda_ritek_prime.py`).
 
@@ -97,9 +97,9 @@ Kết quả rà soát (2026-10-15):
 | P0 | harness | — | ✅ xong 2026-10-16 |
 | P1 | chấm lại BM25, MedCPT, Contriever-FT, MoR | rerank MoR trên CPU 6.6 phút | ✅ 11 run, metric cũ Δ = 0 so với STaRK |
 | P2 | BGE-M3 | MedCPT 7–15 phút/biến thể | ✅ encode no_rel 18 phút, add_rel 47 phút (T4x2). Test: add_rel_max H@1 12.07 · R@20 31.32 · MRR 19.59; no_rel H@1 11.21 · R@20 29.05 · MRR 18.20. 4 run trong `ritek/results/cosine_bgem3/` |
-| P3 | SubgraphRAG (+ encode gte-large) | `none` 2.6h · `sqrt` 8.2h | Dữ liệu: `ritek/scripts/prep_sgrag_data.py`. Kernel `ritek/kaggle/sgrag` gọi lại nguyên văn kernel train STaRK. Chờ smoke. |
-| P4 | GNN-RAG A+ | 36–80 phút trên PPR-2000 | ✅ trùng số với code gốc (`test_rearev_equivalence.py`). 🔄 đang train, hạn 11h |
-| P5 | MoR + BGE-M3 và đối chứng | traversal test ~11 phút | Kernel `ritek/kaggle/mor_ritek` (`SCORER=contriever|bgem3`), dữ liệu `ritek/scripts/prep_mor_data.py` (cần P2 no_rel). Chờ smoke. |
+| P3 | SubgraphRAG (+ encode gte-large) | `none` 2.6h · `sqrt` 8.2h | Smoke đạt (code 9dcbbde, đã sửa rò nhãn val/test). 🔄 `sqrt` đang chạy, `none` xếp hàng |
+| P4 | GNN-RAG A+ | 36–80 phút trên PPR-2000 | ✅ trùng số với code gốc (`test_rearev_equivalence.py`). Phiên 1: 11 epoch / 10.1h (~54 phút/epoch), dev H1 14.3→22.5 vẫn tăng; test (best epoch 10) H@1 20.31 · R@20 46.16 · MRR 28.10 (`gnnrag/rearev_fullkg_s1`). **Không giảm epoch**: chạy tiếp nhiều phiên, state đầy đủ (`test_rearev_resume.py`: Δ = 0); lần nối đầu Adam khởi tạo lại. Còn 89 epoch ≈ 81h GPU. 🔄 phiên 2 |
+| P5 | MoR + BGE-M3 và đối chứng | traversal test ~11 phút | MoR+BGE-M3 (code 53b8416): rerank H@1 25.21 · R@20 46.59 · MRR 34.25; traversal H@1 12.89 · R@20 40.96. Val hit@1 reranker 14.5→30.5. Đối chứng Contriever: xếp hàng. |
 | P6 | ARK | — | để sau |
 
 Mỗi pha cần GPU: smoke test → probe → bảng ước lượng đo thật → chờ duyệt → chạy.
