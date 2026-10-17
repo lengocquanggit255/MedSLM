@@ -108,7 +108,8 @@ for sp in ("train", "val", "test"):
     # nhãn lưu theo ID TOÀN CỤC (h, rel, t); khoá int64 = (h·R + rel)·N + t để ghép bằng np.isin
     key = (L["head"].astype(np.int64) * R + L["rel"].astype(np.int64)) * n_nodes + L["tail"].astype(np.int64)
     labs[sp] = ({int(q): i for i, q in enumerate(L["qids"])}, key, L["off"])
-    log(f"  {sp}: {len(stores[sp]):,} query · {(np.diff(L['off']) > 0).sum():,} có nhãn dương")
+    log(f"  {sp}: {len(stores[sp]):,} query · {(np.diff(L['off']) > 0).sum():,} có nhãn dương · "
+        f"{int(L['off'][-1]):,} triple dương")
 
 
 def usable(sp):
