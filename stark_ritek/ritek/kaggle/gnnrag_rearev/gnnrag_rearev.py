@@ -414,26 +414,32 @@ def _set_rng_state(st):
 def check_dual(workers, batch, micro, n_time=3, loader=None, batch_size=None):
     """So gradient đường song song với đường tuần tự trên model chính (dropout tắt) + đo thời gian.
 
-    Không đụng trạng thái ngẫu nhiên và không đổi trọng số (chỉ forward/backward rồi xoá gradient).
+    Độ lệch = ||g_2gpu - g_1gpu|| / ||g_1gpu|| trên CẢ vector gradient (chuẩn L2). Không lấy lệch tương
+    đối từng tensor: vài bias có gradient ~1e-8 (gần 0 về lý thuyết) lệch tới 80% ngay giữa hai lần chạy
+    1 GPU y hệt nhau, do phép cộng không tất định của GPU (ritek-gnnrag-dual-diag, 2026-10-17). Trả kèm
+    nhiễu nền = lệch giữa hai lần chạy 1 GPU. Không đụng trạng thái ngẫu nhiên và không đổi trọng số
+    (chỉ forward/backward rồi xoá gradient).
     """
     st = _rng_state()
     models = [m for m, _ in workers]
     for m in models:
         m.eval()
-    for m in models:
-        m.zero_grad(set_to_none=True)
-    parallel_backward(workers[:1], batch, micro)
-    ref = {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
-    for m in models:
-        m.zero_grad(set_to_none=True)
-    parallel_backward(workers, batch, micro)
-    got = {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
-    assert set(ref) == set(got), set(ref) ^ set(got)
-    worst = 0.0
-    for n in ref:
-        d = float((ref[n] - got[n]).abs().max())
-        scale = float(ref[n].abs().max())
-        worst = max(worst, d / max(scale, 1e-12) if d > 1e-9 else 0.0)
+
+    def grads(ws):
+        for m in models:
+            m.zero_grad(set_to_none=True)
+        parallel_backward(ws, batch, micro)
+        return {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
+
+    def rel(a, b):
+        assert set(a) == set(b), set(a) ^ set(b)
+        num = sum(float(((a[n] - b[n]).double() ** 2).sum()) for n in a)
+        den = sum(float((a[n].double() ** 2).sum()) for n in a)
+        return math.sqrt(num / max(den, 1e-300))
+
+    ref = grads(workers[:1])
+    noise = rel(ref, grads(workers[:1]))
+    worst = rel(ref, grads(workers))
     timing = {}
     if loader is not None:
         for m in models:
@@ -454,7 +460,65 @@ def check_dual(workers, batch, micro, n_time=3, loader=None, batch_size=None):
         m.zero_grad(set_to_none=True)
         m.train()
     _set_rng_state(st)
-    return worst, timing
+    return worst, noise, timing
+
+
+def dual_diag(workers, loader, batch_size, micro, n_batch=3):
+    """Chẩn đoán lệch gradient 2 GPU (DUAL_DIAG=1): so đường 2 GPU, và cả batch chạy riêng trên cuda:1,
+    với NHIỄU NỀN = hai lần chạy 1 GPU y hệt nhau. Lệch ngang nhiễu nền -> do phép cộng không tất định
+    của GPU, không phải lỗi đường song song. Không đổi trọng số / RNG."""
+    st = _rng_state()
+    (m0, _), (m1, _) = workers
+    dev0 = next(m0.parameters()).device
+    for m in (m0, m1):
+        m.eval()
+    sd0, sd1 = m0.state_dict(), m1.state_dict()
+    out = {"weights_max_diff": max(float((sd0[k].float() - sd1[k].float().to(sd0[k].device)).abs().max())
+                                   for k in sd0 if sd0[k].numel()), "attr_mismatch": []}
+    for (name, a), b in zip(m0.named_modules(), m1.modules()):    # tensor thường (ngoài state_dict)
+        for k, v in vars(a).items():
+            w = vars(b).get(k)
+            if isinstance(v, torch.Tensor) and not (isinstance(w, torch.Tensor) and v.shape == w.shape
+                                                    and torch.equal(v, w.to(v.device))):
+                out["attr_mismatch"].append(f"{name}.{k}")
+
+    def grads(ws, batch):
+        for m in (m0, m1):
+            m.zero_grad(set_to_none=True)
+        _set_rng_state(st)
+        loss = [o[0] for o in parallel_backward(ws, batch, micro)]
+        g = {n: p.grad.detach().to(dev0).clone()
+             for n, p in ws[0][0].named_parameters() if p.grad is not None}
+        for m in (m0, m1):
+            m.zero_grad(set_to_none=True)
+        return g, loss
+
+    n_b = max(1, math.ceil(loader.num_data / batch_size))
+    out["batches"] = []
+    for it in range(n_batch):
+        b = loader.get_batch(it % n_b, batch_size, 0.0)
+        a, la = grads(workers[:1], b)
+        runs = {"1gpu_lần2": grads(workers[:1], b), "2gpu": grads(workers, b), "chỉ_cuda1": grads(workers[1:], b)}
+        na = torch.sqrt(sum((v.double() ** 2).sum() for v in a.values()))
+        rec = {"loss_1gpu": la}
+        for key, (g, lg) in runs.items():
+            assert set(g) == set(a), set(g) ^ set(a)
+            per = []
+            for n in a:
+                d = float((a[n] - g[n].to(a[n].device)).abs().max())
+                per.append((n, d, float(a[n].abs().max())))
+            dn = torch.sqrt(sum(((a[n].double() - g[n].to(a[n].device).double()) ** 2).sum() for n in a))
+            rec[key] = {"loss": lg, "global_rel": float(dn / na), "max_abs": max(p[1] for p in per),
+                        "worst_rel_per_tensor": sorted(({"param": n, "d": d, "scale": s, "rel": d / max(s, 1e-12)}
+                                                        for n, d, s in per if d > 0),
+                                                       key=lambda x: -x["rel"])[:8]}
+        out["batches"].append(rec)
+    for m in (m0, m1):
+        m.train()
+    if dev0.type == "cuda":
+        torch.cuda.set_device(dev0)             # "chỉ_cuda1" chạy ở luồng chính, đổi thiết bị hiện hành
+    _set_rng_state(st)
+    return out
 
 
 # ====================================================================== kernel (Kaggle)
@@ -681,17 +745,25 @@ def main():
         workers = [(trainer.model, kg), (rep, kg.to(d1))]
         b0 = loaders["train"].get_batch(0, args.batch_size, 0)
         try:
-            worst, timing = check_dual(workers, b0, micro, loader=loaders["train"], batch_size=args.batch_size)
+            worst, noise, timing = check_dual(workers, b0, micro, loader=loaders["train"], batch_size=args.batch_size)
         except Exception as e:  # noqa: BLE001 — lỗi đường 2 GPU thì quay về 1 GPU, không bỏ phiên
             logger.info(f"2 GPU lỗi khi kiểm: {type(e).__name__}: {e}")
-            worst, timing = float("inf"), {"error": f"{type(e).__name__}: {e}"[:500]}
+            worst, noise, timing = float("inf"), None, {"error": f"{type(e).__name__}: {e}"[:500]}
             for m, _ in workers:
                 m.zero_grad(set_to_none=True)
                 m.train()
             _set_rng_state(st)
-        ok = worst <= 1e-4
-        dual_info = {"enabled": ok, "grad_max_rel_diff": worst, "sec_per_batch": timing}
-        logger.info(f"2 GPU: gradient lệch tương đối tối đa {worst:.2e} -> {'DÙNG' if ok else 'KHÔNG dùng'}"
+        if os.environ.get("DUAL_DIAG") == "1":
+            diag = dual_diag(workers, loaders["train"], args.batch_size, micro)
+            diag.update(check_dual_rel_l2=worst, check_dual_1gpu_noise=noise, timing=timing, start_epoch=start_epoch)
+            json.dump(diag, open(f"{OUT}/dual_diag.json", "w"), indent=1, ensure_ascii=False)
+            logger.info("DUAL_DIAG " + json.dumps(diag, ensure_ascii=False))
+            return
+        # Nhiễu nền đo được ~1e-7 đến 2e-7; lỗi thật (sai trọng số micro-batch, thiếu gradient, bản sao lệch
+        # trọng số) cho lệch từ 1e-3 trở lên. Ngưỡng 1e-5 nằm giữa hai mức đó.
+        ok = worst <= 1e-5
+        dual_info = {"enabled": ok, "grad_rel_l2": worst, "grad_rel_l2_1gpu_noise": noise, "sec_per_batch": timing}
+        logger.info(f"2 GPU: gradient lệch tương đối L2 {worst:.2e} (nhiễu nền 1 GPU {noise}) -> {'DÙNG' if ok else 'KHÔNG dùng'}"
                     f" · giây/batch {timing}")
         if ok:
             trainer.workers = workers

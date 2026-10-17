@@ -1,0 +1,23 @@
+[
+ {
+  "slug": "ritek-gnnrag-rearev-s4b",
+  "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
+  "args": {
+   "NUM_EPOCH": "100",
+   "BATCH": "8",
+   "TEST_BATCH": "4",
+   "DEADLINE_H": "11.5",
+   "RESUME": "1",
+   "RESUME_EPOCH": "34",
+   "CODE_SHA": "5eac6e4"
+  },
+  "datasets": [
+   "ritek-gnn-data",
+   "ritek-gnn-resume"
+  ],
+  "accounts": [
+   "minhlon192"
+  ],
+  "timeout": 43200
+ }
+]
