@@ -72,8 +72,16 @@ def main():
 
     workers = [(main_m, kg), (rep, kg.to(cpu))]
     for micro, tol in ((2, 0.0), (1, 1e-6)):                # micro=1: 4 micro-batch, thứ tự cộng khác chút
-        worst, _ = K.check_dual(workers, batch, micro)
+        worst, _, _ = K.check_dual(workers, batch, micro)
         check(f"gradient song song = tuần tự (micro {micro}, dropout tắt)", worst <= tol, f"lệch tương đối {worst:.2e}")
+    # ngưỡng 1e-5 của kernel phải bắt được lỗi thật: bản sao lệch trọng số cỡ một bước Adam (lr 5e-4)
+    bad = K.make_replica(build, main_m, cpu)
+    with torch.no_grad():
+        for p in bad.parameters():
+            if p.requires_grad:
+                p.add_(5e-4 * torch.randn_like(p))
+    worst, _, _ = K.check_dual([(main_m, kg), (bad, kg)], batch, 2)
+    check("check_dual bắt bản sao lệch trọng số cỡ 1 bước Adam (> 1e-5)", worst > 1e-5, f"lệch {worst:.2e}")
 
     # Vài bước Adam, dropout BẬT nhưng tắt ngẫu nhiên khác luồng bằng p=0 cho so khớp tất định.
     for m, _ in workers:

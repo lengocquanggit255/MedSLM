@@ -414,26 +414,32 @@ def _set_rng_state(st):
 def check_dual(workers, batch, micro, n_time=3, loader=None, batch_size=None):
     """So gradient đường song song với đường tuần tự trên model chính (dropout tắt) + đo thời gian.
 
-    Không đụng trạng thái ngẫu nhiên và không đổi trọng số (chỉ forward/backward rồi xoá gradient).
+    Độ lệch = ||g_2gpu - g_1gpu|| / ||g_1gpu|| trên CẢ vector gradient (chuẩn L2). Không lấy lệch tương
+    đối từng tensor: vài bias có gradient ~1e-8 (gần 0 về lý thuyết) lệch tới 80% ngay giữa hai lần chạy
+    1 GPU y hệt nhau, do phép cộng không tất định của GPU (ritek-gnnrag-dual-diag, 2026-10-17). Trả kèm
+    nhiễu nền = lệch giữa hai lần chạy 1 GPU. Không đụng trạng thái ngẫu nhiên và không đổi trọng số
+    (chỉ forward/backward rồi xoá gradient).
     """
     st = _rng_state()
     models = [m for m, _ in workers]
     for m in models:
         m.eval()
-    for m in models:
-        m.zero_grad(set_to_none=True)
-    parallel_backward(workers[:1], batch, micro)
-    ref = {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
-    for m in models:
-        m.zero_grad(set_to_none=True)
-    parallel_backward(workers, batch, micro)
-    got = {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
-    assert set(ref) == set(got), set(ref) ^ set(got)
-    worst = 0.0
-    for n in ref:
-        d = float((ref[n] - got[n]).abs().max())
-        scale = float(ref[n].abs().max())
-        worst = max(worst, d / max(scale, 1e-12) if d > 1e-9 else 0.0)
+
+    def grads(ws):
+        for m in models:
+            m.zero_grad(set_to_none=True)
+        parallel_backward(ws, batch, micro)
+        return {n: p.grad.clone() for n, p in models[0].named_parameters() if p.grad is not None}
+
+    def rel(a, b):
+        assert set(a) == set(b), set(a) ^ set(b)
+        num = sum(float(((a[n] - b[n]).double() ** 2).sum()) for n in a)
+        den = sum(float((a[n].double() ** 2).sum()) for n in a)
+        return math.sqrt(num / max(den, 1e-300))
+
+    ref = grads(workers[:1])
+    noise = rel(ref, grads(workers[:1]))
+    worst = rel(ref, grads(workers))
     timing = {}
     if loader is not None:
         for m in models:
@@ -454,7 +460,7 @@ def check_dual(workers, batch, micro, n_time=3, loader=None, batch_size=None):
         m.zero_grad(set_to_none=True)
         m.train()
     _set_rng_state(st)
-    return worst, timing
+    return worst, noise, timing
 
 
 def dual_diag(workers, loader, batch_size, micro, n_batch=3):
@@ -739,23 +745,25 @@ def main():
         workers = [(trainer.model, kg), (rep, kg.to(d1))]
         b0 = loaders["train"].get_batch(0, args.batch_size, 0)
         try:
-            worst, timing = check_dual(workers, b0, micro, loader=loaders["train"], batch_size=args.batch_size)
+            worst, noise, timing = check_dual(workers, b0, micro, loader=loaders["train"], batch_size=args.batch_size)
         except Exception as e:  # noqa: BLE001 — lỗi đường 2 GPU thì quay về 1 GPU, không bỏ phiên
             logger.info(f"2 GPU lỗi khi kiểm: {type(e).__name__}: {e}")
-            worst, timing = float("inf"), {"error": f"{type(e).__name__}: {e}"[:500]}
+            worst, noise, timing = float("inf"), None, {"error": f"{type(e).__name__}: {e}"[:500]}
             for m, _ in workers:
                 m.zero_grad(set_to_none=True)
                 m.train()
             _set_rng_state(st)
         if os.environ.get("DUAL_DIAG") == "1":
             diag = dual_diag(workers, loaders["train"], args.batch_size, micro)
-            diag.update(check_dual_worst=worst, timing=timing, start_epoch=start_epoch)
+            diag.update(check_dual_rel_l2=worst, check_dual_1gpu_noise=noise, timing=timing, start_epoch=start_epoch)
             json.dump(diag, open(f"{OUT}/dual_diag.json", "w"), indent=1, ensure_ascii=False)
             logger.info("DUAL_DIAG " + json.dumps(diag, ensure_ascii=False))
             return
-        ok = worst <= 1e-4
-        dual_info = {"enabled": ok, "grad_max_rel_diff": worst, "sec_per_batch": timing}
-        logger.info(f"2 GPU: gradient lệch tương đối tối đa {worst:.2e} -> {'DÙNG' if ok else 'KHÔNG dùng'}"
+        # Nhiễu nền đo được ~1e-7 đến 2e-7; lỗi thật (sai trọng số micro-batch, thiếu gradient, bản sao lệch
+        # trọng số) cho lệch từ 1e-3 trở lên. Ngưỡng 1e-5 nằm giữa hai mức đó.
+        ok = worst <= 1e-5
+        dual_info = {"enabled": ok, "grad_rel_l2": worst, "grad_rel_l2_1gpu_noise": noise, "sec_per_batch": timing}
+        logger.info(f"2 GPU: gradient lệch tương đối L2 {worst:.2e} (nhiễu nền 1 GPU {noise}) -> {'DÙNG' if ok else 'KHÔNG dùng'}"
                     f" · giây/batch {timing}")
         if ok:
             trainer.workers = workers
