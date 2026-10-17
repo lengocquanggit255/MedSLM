@@ -13,12 +13,12 @@ Hai bước trong một kernel:
      (retrieve/requirements/gte_large_en_v1-5.txt), nhưng nó cần tokenizers 0.19 — không có wheel
      cho Python 3.13 của Kaggle (smoke thứ hai: build từ source lỗi). Dùng 4.45.2, bản 4.x gần
      nhất ăn tokenizers 0.20.3 (có wheel cp313).
-  2. Chạy kernel train `subgraphrag_train.py` (có trong dataset; bản STaRK đã sửa lỗi rò nhãn,
-     xem docstring file đó) trên subgraph PPR-2000 xuất phát từ topic RiTeK. Biến
-     POSW/MAX_EPOCH/... truyền thẳng qua os.environ.
+  2. Chạy kernel train `subgraphrag_train.py` (có trong dataset; vòng train theo code gốc, xem
+     docstring file đó) trên subgraph PPR-2000 xuất phát từ topic RiTeK. Biến POSW/RESUME/...
+     truyền thẳng qua os.environ; SESSION_T0 = lúc phiên bắt đầu, để hạn phiên tính cả thời gian encode.
 
 Dataset: `ritek-sgrag-data` (ritek/scripts/prep_sgrag_data.py).
-Smoke: LIMIT=<n> MAX_EPOCH=2 — encode đủ (để đo giờ), train + suy luận test trên n query.
+Smoke: SMOKE=1 LIMIT=<n> MAX_EPOCH=2 — encode đủ (để đo giờ), train + suy luận test trên n query.
 """
 import glob
 import json
@@ -26,6 +26,7 @@ import os
 import runpy
 import subprocess
 import sys
+import time
 
 MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 WORK = "/kaggle/temp/sgrag_ds"
@@ -119,6 +120,7 @@ def find_ds():
 
 
 def main():
+    os.environ.setdefault("SESSION_T0", str(time.time()))
     ds = find_ds()
     log(f"dataset = {ds}")
     os.makedirs(WORK, exist_ok=True)
