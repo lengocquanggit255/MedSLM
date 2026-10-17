@@ -1,0 +1,5 @@
+[{"slug": "ritek-gnnrag-dual-diag", "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
+  "args": {"NUM_EPOCH": "100", "BATCH": "8", "TEST_BATCH": "4", "RESUME": "1", "RESUME_EPOCH": "34",
+           "DUAL_DIAG": "1", "CODE_SHA": "d7cbe15"},
+  "datasets": ["ritek-gnn-data"], "kernels": ["ritek-gnnrag-rearev-s3"], "accounts": ["minhduonngg"],
+  "timeout": 7200}]
