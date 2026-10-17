@@ -6,7 +6,8 @@ Giống lần chạy STaRK (scripts/build_gnnrag_data.py + build_subgraphrag_lab
   - subgraph = top-2000 PPR (alpha 0.85, 20 vòng — đúng tham số cũ), xuất phát từ **topic RiTeK**
     thay vì khớp tên. Query không có topic -> subgraph rỗng (Q8: chỉ backfill).
   - split RiTeK (train 4,547 / val 505 / test 2,801).
-  - nhãn = triple trên đường đi ngắn nhất topic -> đáp án trong subgraph (≤ 4 bước), id toàn cục.
+  - nhãn = triple trên đường đi ngắn nhất topic <-> đáp án (cả hai chiều, từng cặp, không giới hạn bước) như
+    code gốc — scripts/build_subgraphrag_labels.py; id toàn cục.
 Text cho encoder (gte-large-en-v1.5, encode trong kernel): tên node, tên quan hệ, câu hỏi —
 code gốc SubgraphRAG encode **tên** thực thể và quan hệ (`text_entity_list`, `relation_list`).
 
@@ -16,8 +17,8 @@ Nội dung (ritek/outputs/kaggle_data/ritek-sgrag-data/):
   labels_{train,val,test}.npz nhãn triple (scripts/build_subgraphrag_labels.py --subgraphs)
   texts.json                  node_names · relations · queries[split] = [[id, query], ...]
   gnnrag.py, subgraphrag.py   src/starkbench (SubgraphStore, mô hình)
-  subgraphrag_train.py        ritek/kaggle/sgrag/subgraphrag_train.py: kernel train của lần chạy STaRK,
-                              đã sửa lỗi rò nhãn ở val/test (xem docstring file đó)
+  subgraphrag_train.py        ritek/kaggle/sgrag/subgraphrag_train.py: kernel train, vòng train theo code
+                              gốc (xem docstring file đó)
 """
 import argparse
 import json

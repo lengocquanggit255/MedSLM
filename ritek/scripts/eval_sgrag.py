@@ -1,6 +1,6 @@
 """Chấm SubgraphRAG trên RiTeK (kernel ritek/kaggle/sgrag) qua harness.
 
-Chạy: python ritek/scripts/eval_sgrag.py --posw sqrt [--run ritek/outputs/kaggle/ritek-sgrag-sqrt]
+Chạy: python ritek/scripts/eval_sgrag.py --posw sqrt [--run ritek/outputs/kaggle/ritek-sgrag-sqrt] [--variant mlp_sqrt]
 
 - Query có topic: điểm node = max logit các triple kề (`triple_to_node_scores`, đã tính trong kernel)
   trên subgraph PPR-2000; n_native = số node subgraph (2,000).
@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--posw", required=True, choices=["none", "sqrt"])
     ap.add_argument("--run", default=None, help="mặc định ritek/outputs/kaggle/ritek-sgrag-<posw>")
     ap.add_argument("--results-root", default="ritek/results")
+    ap.add_argument("--variant", default=None, help="mặc định mlp_<posw>")
     args = ap.parse_args()
     run = Path(args.run or f"ritek/outputs/kaggle/ritek-sgrag-{args.posw}")
 
@@ -66,11 +67,14 @@ def main():
         return out, len(nd)
 
     res = evaluate_and_save(
-        scores_fn, qdf, skb, "subgraphrag", f"mlp_{args.posw}", "test", results_root=args.results_root,
+        scores_fn, qdf, skb, "subgraphrag", args.variant or f"mlp_{args.posw}", "test", results_root=args.results_root,
         config={"pos_weight": args.posw, "best_epoch": meta["best_epoch"],
                 "best_val_triple_recall@100": meta["best_val_triple_recall100"], "n_params": meta["n_params"],
                 "emb": meta["emb"], "lr": meta["lr"], "num_rounds": 2, "num_reverse_rounds": 2, "topic_pe": True,
-                "subgraph": "PPR-2000 (alpha 0.85, 20 vòng) từ topic RiTeK", "max_edges_train": 100000,
+                "subgraph": "PPR-2000 (alpha 0.85, 20 vòng) từ topic RiTeK",
+                # kernel từ 2026-10-17 ghi `protocol`; bản trước: nhãn một chiều, train lấy mẫu 100k cạnh
+                "protocol": meta.get("protocol") or {"labels": "đường ngắn nhất một chiều topic -> đáp án (≤ 4 bước)",
+                                                     "train_edges": "lấy mẫu 100k cạnh/subgraph, giữ hết cạnh dương"},
                 "val_test_edges": "toàn bộ cạnh subgraph (không lấy mẫu)", "dde": "trên subgraph đầy đủ",
                 "lm": gte, "backfill": f"{BACKFILL} (medcpt add_rel max)", "run": str(run), "llm_calls": 0},
         notes="SubgraphRAG retriever (không LLM): MLP chấm triple trong subgraph PPR-2000, node = max triple kề.")
