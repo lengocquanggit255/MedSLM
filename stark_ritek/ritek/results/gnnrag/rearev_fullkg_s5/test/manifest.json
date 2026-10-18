@@ -1,0 +1,26 @@
+{
+  "method": "gnnrag",
+  "variant": "rearev_fullkg_s5",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "66f53b5",
+  "timestamp": "2026-10-18 21:05:32",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 180.72,
+  "config": {
+    "impl": "A+: ReaRev g\u1ed1c (cmavro/GNN-RAG) tr\u00ean to\u00e0n KG, message g\u1ed9p theo quan h\u1ec7",
+    "gnnrag_sha": "28d31bc0db3d54f0930e6125f1c98b5b1ace1ba4",
+    "code_sha": "5eac6e4",
+    "best_dev_h1": 0.2644135188866799,
+    "epochs_run": 81,
+    "stopped_by_deadline": 81,
+    "micro_batch": 4,
+    "backfill_no_topic": "results/kaggle/stark-enc-medcpt-add-rel-full (medcpt add_rel max)",
+    "run": "ritek\\outputs\\kaggle\\ritek-gnnrag-rearev-s5"
+  },
+  "notes": "GNN-RAG retriever (ReaRev) \u2014 ch\u1ec9 ph\u1ea7n GNN, kh\u00f4ng LLM. Query kh\u00f4ng topic: backfill, n_native=0."
+}
