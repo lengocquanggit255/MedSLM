@@ -1,0 +1,23 @@
+[
+ {
+  "slug": "ritek-sgrag2-none-s3",
+  "code": "ritek/kaggle/sgrag/sgrag.py",
+  "args": {
+   "POSW": "none",
+   "DEADLINE_H": "11.5",
+   "CODE_SHA": "2feeaee",
+   "RESUME": "1",
+   "RESUME_EPOCH": "38"
+  },
+  "datasets": [
+   "ritek-sgrag-data"
+  ],
+  "accounts": [
+   "minhduonngg"
+  ],
+  "timeout": 43200,
+  "kernels": [
+   "ritek-sgrag2-none-s2"
+  ]
+ }
+]
