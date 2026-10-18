@@ -8,6 +8,7 @@ là ±5.6pp. Kiểm định cặp mạnh hơn nhiều so sánh độc lập vì 
 
 Chạy:
     python scripts/compare.py --a bm25/add_rel --b bm25_seed/add_rel --split test-0.1
+    python scripts/compare.py --a subgraphrag/orig_none --b subgraphrag/mlp_none --split test \n        --results-root ritek/results --dataset ritek
 """
 import argparse
 import sys
@@ -75,9 +76,11 @@ def main():
     ap.add_argument("--split", default="test-0.1")
     ap.add_argument("--results-root", default="results")
     ap.add_argument("--data-root", default="data/stark/prime")
+    ap.add_argument("--dataset", default="stark", choices=["stark", "ritek"],
+                    help="ritek: gold của bản RiTeK (khác STaRK), dùng với --results-root ritek/results")
     args = ap.parse_args()
 
-    qdf = load_queries(args.data_root, args.split)
+    qdf = load_queries(args.data_root, args.split, dataset=args.dataset)
     gold = {int(r["id"]): set(int(x) for x in r["answer_ids"]) for _, r in qdf.iterrows()}
     pa = per_query(Path(args.results_root) / args.a / args.split / "predictions.parquet", gold)
     pb = per_query(Path(args.results_root) / args.b / args.split / "predictions.parquet", gold)
