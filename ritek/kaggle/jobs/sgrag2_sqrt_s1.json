@@ -1,0 +1,18 @@
+[
+ {
+  "slug": "ritek-sgrag2-sqrt-s1",
+  "code": "ritek/kaggle/sgrag/sgrag.py",
+  "args": {
+   "POSW": "sqrt",
+   "DEADLINE_H": "11.5",
+   "CODE_SHA": "2feeaee"
+  },
+  "datasets": [
+   "ritek-sgrag-data"
+  ],
+  "accounts": [
+   "tienthanhahihi"
+  ],
+  "timeout": 43200
+ }
+]
