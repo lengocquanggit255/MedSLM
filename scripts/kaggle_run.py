@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -91,6 +92,47 @@ def status_of(user, key, slug, tries=3):
         if a < tries - 1:
             time.sleep(15 * (a + 1))
     return "UNKNOWN"
+
+
+def bad_files(dest):
+    """File hỏng trong `dest`. API trả 502 khi tải output mà kaggle CLI vẫn ghi phần thân lỗi thành file
+    (~332 byte), để lại file 0 byte, hoặc đứt giữa chừng (IncompleteRead) — đã gặp 2026-10-19. Kiểm:
+    trang lỗi HTML / rỗng; .pt .ckpt .npz (đều là zip) phải qua CRC; .json phải parse được."""
+    bad = []
+    for f in Path(dest).iterdir():
+        if not f.is_file():
+            continue
+        if f.stat().st_size < 4096:
+            head = f.read_bytes()[:64].lstrip().lower()
+            if not head or head.startswith((b"<html", b"<!doctype html")):
+                bad.append(f.name)
+                continue
+        try:
+            if f.suffix in (".pt", ".ckpt", ".npz"):
+                with zipfile.ZipFile(f) as z:
+                    assert z.testzip() is None
+            elif f.suffix == ".json":
+                json.loads(f.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            bad.append(f.name)
+    return bad
+
+
+def download_output(user, key, slug, dest, tries=5, timeout=1800):
+    """Tải output kernel về `dest`; file nào là trang lỗi thì xoá rồi tải lại. True nếu tải sạch."""
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    for a in range(tries):
+        rc, out = kag(user, key, "kernels", "output", f"{user}/{slug}", "-p", str(dest), timeout=timeout)
+        bad = bad_files(dest)
+        if rc == 0 and not bad:
+            return True
+        print(f"  [{user}] {slug}: CLI rc={rc}, {len(bad)} file hỏng ({', '.join(bad[:3])}) · "
+              f"{out.strip().splitlines()[-1][:120] if out.strip() else ''} -> tải lại ({a + 1}/{tries})", flush=True)
+        for n in bad:
+            (dest / n).unlink()
+        time.sleep(60 * (a + 1))
+    return False
 
 
 def account_busy(user, key, prefix=("stark-", "ritek-")):
@@ -236,15 +278,15 @@ def main():
             unknown_streak.pop(job["slug"], None)
             if st == "COMPLETE":
                 dest = outdir / job["slug"]
-                dest.mkdir(parents=True, exist_ok=True)
-                kag(u, k, "kernels", "output", f"{u}/{job['slug']}", "-p", str(dest), timeout=1800)
+                if not download_output(u, k, job["slug"], dest):
+                    print(f"  [{u}] ✗ {job['slug']}: COMPLETE nhưng tải output vẫn ra trang lỗi")
+                    failed.append((job, "tải output lỗi"))
+                    continue
                 print(f"  [{u}] ✔ {job['slug']} -> {dest}")
                 done.append(job)
             else:
                 print(f"  [{u}] ✗ {job['slug']} kết thúc với {st}")
-                dest = outdir / job["slug"]
-                dest.mkdir(parents=True, exist_ok=True)
-                kag(u, k, "kernels", "output", f"{u}/{job['slug']}", "-p", str(dest), timeout=900)
+                download_output(u, k, job["slug"], outdir / job["slug"], tries=2, timeout=900)
                 failed.append((job, st))
 
     print(f"\nXong: {len(done)} thành công, {len(failed)} thất bại")

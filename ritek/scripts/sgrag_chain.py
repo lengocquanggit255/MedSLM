@@ -23,7 +23,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from kaggle_run import ACCOUNTS, BUSY, kag, quota_left, status_of  # noqa: E402
+from kaggle_run import ACCOUNTS, BUSY, bad_files, download_output, quota_left, status_of  # noqa: E402
 
 DEADLINE_H = 11.5
 OUTDIR = ROOT / "ritek/outputs/kaggle"
@@ -33,14 +33,15 @@ def prev_meta(user, key, slug, posw, poll):
     """Meta của phiên `slug`: chờ phiên xong trên Kaggle, tải output nếu máy chưa có. None nếu phiên lỗi."""
     out = OUTDIR / slug
     meta_f = out / f"subgraphrag_{posw}_meta.json"
-    if not (meta_f.exists() and (out / f"subgraphrag_{posw}_state.pt").exists()):
+    if not (meta_f.exists() and (out / f"subgraphrag_{posw}_state.pt").exists() and not bad_files(out)):
         while (st := status_of(user, key, slug)) in (*BUSY, "UNKNOWN"):
             time.sleep(poll)
         if st != "COMPLETE":
             print(f"{slug}: {st}", flush=True)
             return None
-        out.mkdir(parents=True, exist_ok=True)
-        kag(user, key, "kernels", "output", f"{user}/{slug}", "-p", str(out), timeout=3600)
+        if not download_output(user, key, slug, out, timeout=3600):
+            print(f"{slug}: tải output vẫn ra trang lỗi", flush=True)
+            return None
         print(f"đã tự tải output {slug} -> {out}", flush=True)
     return json.loads(meta_f.read_text(encoding="utf-8")) if meta_f.exists() else None
 
