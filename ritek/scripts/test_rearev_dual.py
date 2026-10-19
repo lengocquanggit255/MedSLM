@@ -23,6 +23,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=str(ROOT / ".cache/gnnrag_repo"))
     gnn = K.fetch_repo(ap.parse_args().repo)
+    K.add_lm_choice(gnn)
     sys.path.insert(0, gnn)
     from models.ReaRev.rearev import ReaRev
     from transformers import AutoTokenizer
@@ -37,7 +38,7 @@ def main():
     rows = [{"id": i, "query": f"which drug treats disease number {i} and also targets gene {i * 7}",
              "answer_ids": sorted(np.random.choice(V, size=1 + i, replace=False).tolist()),
              "topic_ids": [int(np.random.randint(V))]} for i in range(B)]
-    args = K.make_parser().parse_args(["ReaRev", "--name", "cwq", "--lm", "sbert", "--relation_word_emb", "True",
+    args = K.make_parser().parse_args(["ReaRev", "--name", "cwq", "--lm", K.LM, "--relation_word_emb", "True",
                                        "--entity_dim", "50", "--num_iter", "2", "--num_ins", "3", "--num_gnn", "3"])
     args.use_cuda = False
     a = vars(args)

@@ -5,6 +5,7 @@ Code gốc: github.com/cmavro/GNN-RAG @ 28d31bc0db3d54f0930e6125f1c98b5b1ace1ba4
 KHÔNG có license nên không chép vào repo này: kernel clone đúng commit đó rồi vá lúc chạy
 (`apply_patches`). Cấu hình theo scripts/rearev_cwq.sh của repo: entity_dim 50 · batch 8 ·
 num_iter 2 · num_ins 3 · num_gnn 3 · lm sbert · relation_word_emb · eval_every 2 · num_epoch 100.
+LM=bgem3 (ablation, adapted): thay MiniLM bằng BAAI/bge-m3, mọi thứ khác giữ nguyên (`add_lm_choice`).
 
 VÌ SAO PHẢI VÁ PHÉP TÍNH (không đổi kết quả):
   ReaRev tạo message cho TỪNG cạnh: fact_val [|E_batch|, d] = relu(W·r ⊙ q)·p(head) rồi sparse.mm
@@ -13,7 +14,7 @@ VÌ SAO PHẢI VÁ PHÉP TÍNH (không đổi kết quả):
   hỏi) và p(head) vô hướng, nên
       Σ_{(h,r,t)} relu(W·r ⊙ q)·p_h  =  Σ_r relu(W·r ⊙ q)·S[t, r],   S[t, r] = Σ_{h:(h,r,t)} p_h
   S = M @ p, M ∈ N^{(V·R)×V} cố định ⇒ một sparse-mm mỗi layer. Chiều ngược (reason_layer_inv) và
-  khởi tạo entity (TypeLayer, trọng số 1) gộp y hệt. ritek/gnnrag/test_equivalence.py đối chiếu số
+  khởi tạo entity (TypeLayer, trọng số 1) gộp y hệt. ritek/scripts/test_rearev_equivalence.py đối chiếu số
   với code gốc trên KG nhỏ.
 
 THAY ĐỔI TẦNG DỮ LIỆU (bắt buộc, không đụng model):
@@ -57,7 +58,13 @@ import torch
 import torch.nn.functional as F
 
 GNNRAG_SHA = "28d31bc0db3d54f0930e6125f1c98b5b1ace1ba4"
-LM_NAME = "sentence-transformers/all-MiniLM-L6-v2"   # lm == 'sbert' trong code gốc
+# LM mã hoá câu hỏi + tên quan hệ (biến môi trường LM). `sbert` = cấu hình gốc (rearev_cwq.sh), có sẵn trong
+# code gốc. Các LM khác là ABLATION (adapted): code gốc không có, `add_lm_choice` chèn một nhánh y như các
+# nhánh sẵn có của BERTInstruction (tokenizer, pretrained_weights, word_dim) — không đổi gì khác.
+LMS = {"sbert": ("sentence-transformers/all-MiniLM-L6-v2", 384),
+       "bgem3": ("BAAI/bge-m3", 1024)}                       # XLM-RoBERTa-large; dense = CLS như cách gốc dùng
+LM = os.environ.get("LM", "sbert")
+LM_NAME = LMS[LM][0]
 VERY_NEG = -100000000000
 
 
@@ -74,6 +81,30 @@ def fetch_repo(dest):
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dest, capture_output=True, text=True).stdout.strip()
     assert head == GNNRAG_SHA, f"repo GNN-RAG ở {head}, cần {GNNRAG_SHA}"
     return os.path.join(dest, "gnn")
+
+
+def add_lm_choice(gnn_dir):
+    """LM ngoài code gốc: thêm nhánh `elif model == LM` vào BERTInstruction.__init__ (ngay trước nhánh
+    'simcse', cùng 3 dòng như các nhánh gốc) và thêm LM vào choices của --lm. Sửa file trong bản clone,
+    gọi TRƯỚC khi import module gốc; chạy lại không chèn hai lần. LM = 'sbert' thì không đụng gì."""
+    if LM == "sbert":
+        return
+    hf, dim = LMS[LM]
+    f = os.path.join(gnn_dir, "modules", "question_encoding", "bert_encoder.py")
+    s = open(f, encoding="utf-8").read()
+    branch = f"        elif model == '{LM}':\n"
+    if branch not in s:
+        anchor = "        elif model == 'simcse':\n"
+        assert s.count(anchor) == 1, "bert_encoder.py gốc đã đổi"
+        s = s.replace(anchor, branch + f"            self.tokenizer = AutoTokenizer.from_pretrained('{hf}')\n"
+                      f"            self.pretrained_weights = '{hf}'\n            word_dim = {dim}\n" + anchor)
+        open(f, "w", encoding="utf-8").write(s)
+    f = os.path.join(gnn_dir, "parsing.py")
+    s = open(f, encoding="utf-8").read()
+    if f"'{LM}']" not in s:
+        anchor = "'simcse', 'relbert'])"
+        assert s.count(anchor) == 1, "parsing.py gốc đã đổi"
+        open(f, "w", encoding="utf-8").write(s.replace(anchor, f"'simcse', 'relbert', '{LM}'])"))
 
 
 # ======================================================================== đồ thị toàn KG
@@ -280,6 +311,8 @@ class FullKGLoader:
         self.max_query_word = max(len(r["query"].split(" ")) for r in rows) + 2
         self.query_texts = np.array([tokenizer(r["query"], max_length=self.max_query_word, padding="max_length",
                                                truncation=True)["input_ids"] for r in rows], dtype=int)
+        # chỉ để ghi lại: số câu bị cắt bớt token vì giới hạn theo số từ của gốc (tokenizer càng tách nhỏ càng nhiều)
+        self.n_truncated = sum(len(tokenizer(r["query"])["input_ids"]) > self.max_query_word for r in rows)
         self.question_id = [r["id"] for r in rows]
         self.answer_lists = np.empty(self.num_data, dtype=object)
         for i, r in enumerate(rows):
@@ -561,6 +594,7 @@ def main():
     SESSION_EPOCHS = int(os.environ.get("SESSION_EPOCHS", "0"))   # >0: dừng sau n epoch (chỉ để kiểm resume)
     os.makedirs(OUT, exist_ok=True)
     gnn_dir = fetch_repo(os.environ.get("REPO_DIR", "/kaggle/temp/GNN-RAG"))
+    add_lm_choice(gnn_dir)
     sys.path.insert(0, gnn_dir)
     os.chdir(gnn_dir)
 
@@ -570,7 +604,7 @@ def main():
     from transformers import AutoTokenizer
 
     args = make_parser().parse_args([
-        "ReaRev", "--name", "cwq", "--data_folder", DS + "/", "--lm", "sbert", "--relation_word_emb", "True",
+        "ReaRev", "--name", "cwq", "--data_folder", DS + "/", "--lm", LM, "--relation_word_emb", "True",
         "--entity_dim", "50", "--num_epoch", str(NUM_EPOCH), "--batch_size", str(BATCH), "--eval_every", "2",
         "--num_iter", "2", "--num_ins", "3", "--num_gnn", "3", "--test_batch_size", str(TEST_BATCH),
         "--checkpoint_dir", OUT + "/", "--experiment_name", "rearev"])
@@ -591,6 +625,8 @@ def main():
     loaders = {s: FullKGLoader(v, kg, tok, rt, rti) for s, v in rows.items()}
     logger.info(f"KG: {kg.V:,} node · {kg.num_fact:,} fact (gồm self-loop) · R={kg.R} · "
                 + " · ".join(f"{s} {l.num_data}" for s, l in loaders.items()))
+    logger.info(f"LM {LM} = {LM_NAME} · câu hỏi bị cắt token (giới hạn số từ + 2 như gốc): "
+                + " · ".join(f"{s} {l.n_truncated}/{l.num_data} (max {l.max_query_word})" for s, l in loaders.items()))
 
     class Trainer(train_model.Trainer_KBQA):
         def load_data(self, a, tokenize):
@@ -801,6 +837,7 @@ def main():
                                                           if isinstance(v, (int, float, str, bool, type(None)))},
         "micro_batch": micro, "batch": args.batch_size, "smoke": SMOKE,
         "n": {s: l.num_data for s, l in loaders.items()},
+        "query_truncated": {s: l.n_truncated for s, l in loaders.items()},
         "kg": {"nodes": kg.V, "facts_incl_self_loop": kg.num_fact, "R_incl_self_loop": kg.R},
         "best_dev_h1": float(trainer.best_h1), "best_dev_f1": float(trainer.best_f1),
         "epochs_run": len(trainer.history), "stopped_by_deadline": trainer.stopped_by_deadline,
