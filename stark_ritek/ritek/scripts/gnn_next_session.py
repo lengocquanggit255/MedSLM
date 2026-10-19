@@ -1,11 +1,12 @@
 """Đẩy phiên kế tiếp của GNN-RAG A+ khi phiên trước xong (chuỗi nhiều phiên, ritek/PLAN.md P4).
 
 Chạy: python ritek/scripts/gnn_next_session.py --prev ritek-gnnrag-rearev-s2 --prev-account minhduonngg \
-          --next ritek-gnnrag-rearev-s3 --account minhduonngg --code-sha <sha>
+          --next ritek-gnnrag-rearev-s3 --account minhduonngg --code-sha <sha> [--lm bgem3]
 
 Chờ `--prev` xong, đọc output đã tải về ritek/outputs/kaggle/<prev>/rearev_meta.json:
   - phiên trước lỗi, hoặc đã đủ epoch -> dừng, không đẩy gì.
   - còn epoch -> đẩy `--next` (RESUME=1, RESUME_EPOCH = epoch phiên trước đã xong).
+  - LM của phiên trước (meta args.lm) khác `--lm` -> dừng: state không nạp được vào model khác LM.
 Hạn phiên cố định DEADLINE_H = 11.5: Kaggle cho phiên đã bắt đầu chạy hết 12h dù quota cạn giữa
 chừng, nên chỉ cần account còn quota > 0 lúc đẩy. Kernel dừng train ở cuối epoch để còn chỗ suy luận
 test, nên phiên xong trước mốc 12h.
@@ -69,6 +70,7 @@ def main():
     ap.add_argument("--account", required=True)
     ap.add_argument("--code-sha", required=True)
     ap.add_argument("--poll", type=int, default=600)
+    ap.add_argument("--lm", default="sbert", help="biến LM của kernel; sbert = cấu hình gốc")
     a = ap.parse_args()
     accs = dict(ACCOUNTS)
     pkey, key = accs[a.prev_account], accs[a.account]
@@ -92,6 +94,8 @@ def main():
     epoch = int(meta["epochs_run"])
     print(f"{a.prev}: epoch {epoch}/{meta['num_epoch']} · best dev H1 {meta['best_dev_h1']:.4f} · "
           f"2 GPU {meta.get('dual_gpu')}", flush=True)
+    if meta["args"]["lm"] != a.lm:
+        sys.exit(f"{a.prev} dùng LM {meta['args']['lm']}, phiên mới --lm {a.lm} -> dừng")
     if meta["done"]:
         print("đã đủ epoch -> không đẩy phiên mới", flush=True)
         return
@@ -102,7 +106,7 @@ def main():
     job = {"slug": a.next, "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
            "args": {"NUM_EPOCH": str(meta["num_epoch"]), "BATCH": "8", "TEST_BATCH": "4",
                     "DEADLINE_H": str(DEADLINE_H), "RESUME": "1", "RESUME_EPOCH": str(epoch),
-                    "CODE_SHA": a.code_sha},
+                    "CODE_SHA": a.code_sha, **({"LM": a.lm} if a.lm != "sbert" else {})},
            "datasets": ["ritek-gnn-data"], "accounts": [a.account], "timeout": 43200}
     if a.account == a.prev_account:
         job["kernels"] = [a.prev]
