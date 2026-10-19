@@ -11,7 +11,7 @@ meta -> dừng, xem tay.
 Hạn phiên DEADLINE_H 11.5 như GNN (ritek/scripts/gnn_next_session.py): Kaggle cho phiên đã bắt đầu chạy hết
 12h dù quota cạn giữa chừng, nên chỉ cần quota > 0 lúc đẩy.
 Máy ngủ giữa chừng (dispatcher chết): chạy lại với --from <k+1>, k = phiên đang chạy dở -> script chờ phiên k
-xong trên Kaggle, tự tải output rồi nối tiếp.
+xong trên Kaggle, tự tải output rồi nối tiếp. --wait-quota: hết quota thì chờ tới khi làm mới rồi đẩy.
 """
 import argparse
 import json
@@ -55,6 +55,7 @@ def main():
     ap.add_argument("--from", dest="start", type=int, default=1, help="phiên bắt đầu đẩy (phiên trước đã/đang chạy)")
     ap.add_argument("--max-sessions", type=int, default=6)
     ap.add_argument("--poll", type=int, default=600)
+    ap.add_argument("--wait-quota", action="store_true", help="quota hết thì chờ (poll) tới khi làm mới rồi đẩy, thay vì dừng")
     a = ap.parse_args()
     key = dict(ACCOUNTS)[a.account]
 
@@ -75,9 +76,10 @@ def main():
                 return
             args.update(RESUME="1", RESUME_EPOCH=str(meta["epochs_run"]))
             job["kernels"] = [prev]
-        q = quota_left(a.account, key)
-        if not q > 0.1:
-            sys.exit(f"{a.account} còn {q:.2f}h quota -> không đẩy {slug}")
+        while not (q := quota_left(a.account, key)) > 0.1:
+            if not a.wait_quota:
+                sys.exit(f"{a.account} còn {q:.2f}h quota -> không đẩy {slug}")
+            time.sleep(a.poll)
         jf = ROOT / "ritek/kaggle/jobs" / f"{slug.replace('ritek-', '').replace('-', '_')}.json"
         jf.write_text(json.dumps([job], indent=1), encoding="utf-8")
         print(f"{a.account} quota {q:.2f}h · đẩy {slug} ({jf.name})", flush=True)
