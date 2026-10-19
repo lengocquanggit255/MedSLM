@@ -1,0 +1,59 @@
+{
+  "method": "subgraphrag",
+  "variant": "orig_sqrt_s2",
+  "split": "test",
+  "dataset": "ritek",
+  "git_sha": "a5ff8cd",
+  "timestamp": "2026-10-19 22:54:23",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "n_candidates": 129375,
+  "full_ranking": true,
+  "topk_stored": 1000,
+  "runtime_sec": 181.63,
+  "config": {
+    "pos_weight": "sqrt",
+    "best_epoch": 35,
+    "best_val_triple_recall@100": 0.6775146576151849,
+    "n_params": 4217857,
+    "emb": 1024,
+    "lr": 0.001,
+    "num_rounds": 2,
+    "num_reverse_rounds": 2,
+    "topic_pe": true,
+    "subgraph": "PPR-2000 (alpha 0.85, 20 v\u00f2ng) t\u1eeb topic RiTeK",
+    "protocol": {
+      "labels": "\u0111\u01b0\u1eddng ng\u1eafn nh\u1ea5t 2 chi\u1ec1u topic<->\u0111\u00e1p \u00e1n theo t\u1eebng c\u1eb7p, nh\u01b0 code g\u1ed1c",
+      "train_edges": "to\u00e0n b\u1ed9 c\u1ea1nh subgraph",
+      "model": "Retriever g\u1ed1c (one-hot 2 chi\u1ec1u, DDE 2 k\u00eanh)",
+      "loop": "train.py g\u1ed1c: val tr\u01b0\u1edbc train, patience 10, seed 42"
+    },
+    "val_test_edges": "to\u00e0n b\u1ed9 c\u1ea1nh subgraph (kh\u00f4ng l\u1ea5y m\u1eabu)",
+    "dde": "tr\u00ean subgraph \u0111\u1ea7y \u0111\u1ee7",
+    "lm": {
+      "model": "Alibaba-NLP/gte-large-en-v1.5",
+      "revision": "104333d6af6f97649377c2afbde10a7704870c7b",
+      "attention": "attention th\u01b0\u1eddng (thi\u1ebfu xformers; c\u00f9ng ph\u00e9p t\u00ednh)",
+      "encode_sec": 796.9,
+      "text": "t\u00ean node / t\u00ean quan h\u1ec7 / c\u00e2u h\u1ecfi",
+      "pooling": "CLS + L2",
+      "dtype": "fp32",
+      "transformers": "4.45.2",
+      "model_card_check": [
+        [
+          77.06999969482422,
+          37.029998779296875
+        ],
+        [
+          35.349998474121094,
+          62.459999084472656
+        ]
+      ],
+      "code_sha": "2feeaee"
+    },
+    "backfill": "results/kaggle/stark-enc-medcpt-add-rel-full (medcpt add_rel max)",
+    "run": "ritek\\outputs\\kaggle\\ritek-sgrag2-sqrt-s2",
+    "llm_calls": 0
+  },
+  "notes": "SubgraphRAG retriever (kh\u00f4ng LLM): MLP ch\u1ea5m triple trong subgraph PPR-2000, node = max triple k\u1ec1."
+}
