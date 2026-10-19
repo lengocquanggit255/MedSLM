@@ -1,0 +1,24 @@
+[
+ {
+  "slug": "ritek-gnnrag-bgem3-s2",
+  "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
+  "args": {
+   "NUM_EPOCH": "100",
+   "BATCH": "8",
+   "TEST_BATCH": "4",
+   "DEADLINE_H": "11.5",
+   "RESUME": "1",
+   "RESUME_EPOCH": "21",
+   "CODE_SHA": "14b5edd",
+   "LM": "bgem3"
+  },
+  "datasets": [
+   "ritek-gnn-data",
+   "ritek-gnn-resume"
+  ],
+  "accounts": [
+   "minhduonngg"
+  ],
+  "timeout": 43200
+ }
+]

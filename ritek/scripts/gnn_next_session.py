@@ -12,7 +12,8 @@ chừng, nên chỉ cần account còn quota > 0 lúc đẩy. Kernel dừng trai
 test, nên phiên xong trước mốc 12h.
 Nguồn state: cùng account -> gắn thẳng output kernel trước (job["kernels"]); khác account -> upload
 state + checkpoint (không kèm điểm test 1.4 GB) thành dataset `ritek-gnn-resume` của account mới.
-Rồi chạy dispatcher cho phiên mới (chờ xong, tải output về).
+Rồi chạy dispatcher cho phiên mới (chờ xong, tải output về). --wait-quota: account hết quota thì chờ
+tới khi Kaggle làm mới (hằng tuần) rồi mới đẩy.
 """
 import argparse
 import json
@@ -70,6 +71,7 @@ def main():
     ap.add_argument("--account", required=True)
     ap.add_argument("--code-sha", required=True)
     ap.add_argument("--poll", type=int, default=600)
+    ap.add_argument("--wait-quota", action="store_true", help="quota hết thì chờ (poll) tới khi làm mới rồi đẩy, thay vì dừng")
     ap.add_argument("--lm", default="sbert", help="biến LM của kernel; sbert = cấu hình gốc")
     a = ap.parse_args()
     accs = dict(ACCOUNTS)
@@ -99,9 +101,10 @@ def main():
     if meta["done"]:
         print("đã đủ epoch -> không đẩy phiên mới", flush=True)
         return
-    q = quota_left(a.account, key)
-    if not q > 0.1:
-        sys.exit(f"{a.account} còn {q:.2f}h quota -> không đẩy, chọn account khác")
+    while not (q := quota_left(a.account, key)) > 0.1:
+        if not a.wait_quota:
+            sys.exit(f"{a.account} còn {q:.2f}h quota -> không đẩy, chọn account khác")
+        time.sleep(a.poll)
 
     job = {"slug": a.next, "code": "ritek/kaggle/gnnrag_rearev/gnnrag_rearev.py",
            "args": {"NUM_EPOCH": str(meta["num_epoch"]), "BATCH": "8", "TEST_BATCH": "4",
