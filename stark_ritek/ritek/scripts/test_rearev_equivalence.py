@@ -2,6 +2,7 @@
 
 Chạy: python ritek/scripts/test_rearev_equivalence.py [--repo .cache/gnnrag_repo]
   (repo = clone cmavro/GNN-RAG @ 28d31bc0, xem fetch_repo trong kernel; tải MiniLM từ HF lần đầu)
+  LM=bgem3 python ritek/scripts/test_rearev_equivalence.py   # cùng phép kiểm với LM ablation (tải bge-m3)
 
 Cùng MỘT model ReaRev (lm sbert, cấu hình CWQ), cùng trọng số, dropout tắt, trên KG ngẫu nhiên nhỏ
 có cạnh MỘT chiều (để chiều xuôi ≠ chiều ngược, kiểm cả reason_layer_inv):
@@ -29,6 +30,7 @@ def main():
     ap.add_argument("--repo", default=str(ROOT / ".cache/gnnrag_repo"))
     args_cli = ap.parse_args()
     gnn = K.fetch_repo(args_cli.repo)
+    K.add_lm_choice(gnn)
     sys.path.insert(0, gnn)
 
     from dataset_load import BasicDataLoader
@@ -57,7 +59,7 @@ def main():
                      "answer_ids": sorted(np.random.choice(V, size=1 + i, replace=False).tolist()),
                      "topic_ids": [int(np.random.randint(V))]})
 
-    args = K.make_parser().parse_args(["ReaRev", "--name", "cwq", "--lm", "sbert", "--relation_word_emb", "True",
+    args = K.make_parser().parse_args(["ReaRev", "--name", "cwq", "--lm", K.LM, "--relation_word_emb", "True",
                          "--entity_dim", "50", "--num_iter", "2", "--num_ins", "3", "--num_gnn", "3",
                          "--linear_dropout", "0", "--lm_dropout", "0"])
     args.use_cuda = False
