@@ -147,3 +147,13 @@ Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). 
 | BGE-M3 add_rel, gộp max | `cosine_bgem3/add_rel_max` | 13.00 | 12.07 | 27.92 | 25.63 | 31.32 | 19.59 |
 | BGE-M3 no_rel | `cosine_bgem3/no_rel` | 12.04 | 11.21 | 25.71 | 24.17 | 29.05 | 18.20 |
 | BGE-M3 no_rel, gộp max | `cosine_bgem3/no_rel_max` | 12.07 | 11.21 | 25.71 | 24.12 | 29.12 | 18.17 |
+
+**Subgraph (test)** — `python ritek/scripts/subgraph_stats.py`. avg answer recall là TRẦN của phương pháp (không xếp hạng được node chưa thấy); đặt cạnh R@20.
+
+| Phương pháp | Q_valid | avg node | avg edge | avg answer recall | full recall rate | answer recall /2,801 | full recall /2,801 | R@20 thật |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| SubgraphRAG (PPR-2000 từ topic) | 2,783 | 2,000 | 586,981 | 68.50% | 65.15% | 68.06% | 64.73% | 30.63 |
+| GNN-RAG — đầu vào: toàn KG | 2,783 | 129,375 | 8,100,498 | 100.00% | 100.00% | 99.36% | 99.36% | 52.90 |
+| GNN-RAG — node có pred_dist ≠ 0 | 2,783 | 123,332 | — | 100.00% | 100.00% | 99.36% | 99.36% | 52.90 |
+
+Q_valid bỏ 18 query test không có topic (không có subgraph); hai cột "/2,801" tính chúng là 0. avg edge = cạnh cảm sinh trên KG 8,100,498 cạnh, đúng tập triple SubgraphRAG chấm.
