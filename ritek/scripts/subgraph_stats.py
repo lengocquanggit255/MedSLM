@@ -26,8 +26,7 @@ from starkbench.gnnrag import SubgraphStore  # noqa: E402
 from starkbench.runner import load_queries  # noqa: E402
 
 DS = ROOT / "ritek/outputs/kaggle_data/ritek-sgrag-data"
-GNN_RUNS = [("GNN-RAG (MiniLM, bản chính)", "ritek-gnnrag-rearev-s6"),
-            ("GNN-RAG + BGE-M3", "ritek-gnnrag-bgem3-s5")]
+GNN_RUNS = [("GNN-RAG (MiniLM, bản chính)", "ritek-gnnrag-rearev-s6")]
 
 
 def count_edges(nodes, indptr, indices, mark):
