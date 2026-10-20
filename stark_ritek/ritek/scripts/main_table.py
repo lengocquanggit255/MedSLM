@@ -28,7 +28,7 @@ ABLATION = [("MoR traversal, không rerank", "mor/traversal_no_rerank"),
             ("MoR w/o RS", "mor/wo_RS"),
             ("MoR, reranker train lại (đối chứng)", "mor/contriever_retrained_rerank"),
             ("MoR + BGE-M3", "mor/bgem3_rerank"),
-            ("GNN-RAG + BGE-M3", "gnnrag/rearev_fullkg_bgem3"),
+            ("GNN-RAG + BGE-M3 (dừng ở epoch 42/100)", "gnnrag/rearev_fullkg_bgem3_s2"),
             ("SubgraphRAG + pos_weight sqrt", "subgraphrag/orig_sqrt")]
 APPENDIX = [("BM25 no_rel", "bm25/no_rel"),
             ("MedCPT add_rel, gộp max", "cosine_medcpt/add_rel_max"),
