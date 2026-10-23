@@ -159,9 +159,9 @@ def account_busy(user, key, prefix=("stark-", "ritek-")):
 def quota_left(user, key):
     code = ("import kaggle,sys;q=kaggle.api.quota_view().gpu_quota;"
             "print((q.total_time_allowed-q.time_used).total_seconds()/3600)")
-    r = subprocess.run([sys.executable, "-c", code], env=env(user, key),
-                       capture_output=True, text=True, timeout=300)
-    try:
+    try:   # lỗi mạng/quá hạn nhất thời -> nan (người gọi coi như "chưa đọc được", thử lại), không làm sập chuỗi
+        r = subprocess.run([sys.executable, "-c", code], env=env(user, key),
+                           capture_output=True, text=True, timeout=300)
         return float(r.stdout.strip().splitlines()[-1])
     except Exception:
         return float("nan")
