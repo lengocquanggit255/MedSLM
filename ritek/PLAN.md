@@ -110,7 +110,7 @@ Mỗi pha cần GPU: smoke test → probe → bảng ước lượng đo thật 
 
 ## 6. Kết quả chính (test, 2,801 query, `sanitized`)
 
-Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). Chưa có kiểm định cặp giữa các phương pháp.
+Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). QAFD-RAG không có số xếp hạng (D9b) — chỉ ở bảng subgraph bên dưới.
 
 **Bản chính**
 
@@ -148,6 +148,8 @@ Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). 
 | BGE-M3 add_rel, gộp max | `cosine_bgem3/add_rel_max` | 13.00 | 12.07 | 27.92 | 25.63 | 31.32 | 19.59 |
 | BGE-M3 no_rel | `cosine_bgem3/no_rel` | 12.04 | 11.21 | 25.71 | 24.17 | 29.05 | 18.20 |
 | BGE-M3 no_rel, gộp max | `cosine_bgem3/no_rel_max` | 12.07 | 11.21 | 25.71 | 24.12 | 29.12 | 18.17 |
+
+**Kiểm định cặp các phương pháp đứng cạnh nhau** (`scripts/compare.py --results-root ritek/results --dataset ritek`, n = 2,801; McNemar cho Hit@k, bootstrap 10k cho R@20/MRR; 24/10): MoR > GNN-RAG (mọi metric, p < 0.001) · **GNN-RAG ≈ Contriever-FT** (H@1 p 0.40, H@5 p 0.72, R@20 p 0.10, MRR p 0.97 — không kết luận được) · Contriever-FT > BM25 > BGE-M3 > MedCPT (mọi metric, p < 0.001) · MedCPT vs SubgraphRAG trái chiều: MedCPT hơn H@1 (p 0.001), SubgraphRAG hơn H@5/R@20/MRR (p ≤ 0.022). Ablation chưa kiểm định cặp (trừ `orig_none` vs `mlp_none`, P3).
 
 **Subgraph (test)** — `python ritek/scripts/subgraph_stats.py`. avg answer recall là TRẦN của phương pháp (không xếp hạng được node chưa thấy); đặt cạnh R@20.
 
