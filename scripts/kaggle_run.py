@@ -6,6 +6,7 @@ Ràng buộc đã xác minh (xem docs/PLAN.md §8):
   - `machine_shape: "NvidiaTeslaT4"` trong kernel-metadata.json mới được T4x2;
     thiếu nó sẽ nhận P100 (sm_60) mà torch cài sẵn KHÔNG hỗ trợ.
   - Kaggle CLI đọc file code bằng codec mặc định của hệ -> phải đặt PYTHONUTF8=1.
+  - Job có `"gpu": false` chạy phiên CPU (không tính quota GPU); vẫn giữ 1 job/account như job GPU.
   - Account + key nằm trong env/.env (xem `load_accounts`), không hardcode trong code.
 
 Dùng:
@@ -190,6 +191,9 @@ def push(user, key, job, workdir: Path):
         "competition_sources": [], "kernel_sources": [f"{user}/{s}" for s in job.get("kernels", [])],
         "model_sources": [],
     }
+    if job.get("gpu", True) is False:              # job chỉ dùng CPU: không tính vào quota GPU tuần
+        meta["enable_gpu"] = "false"
+        del meta["machine_shape"]
     (d / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     code, out = kag(user, key, "kernels", "push", "-p", str(d),
                     # 43200s = 12h, giới hạn tối đa của phiên Kaggle. Đặt thấp hơn chỉ tổ bị cắt giữa chừng
