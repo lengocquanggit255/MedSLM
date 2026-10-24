@@ -152,8 +152,8 @@ Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). 
 
 | Phương pháp | Q_valid | avg node | avg edge | avg answer recall | full recall rate | answer recall /2,801 | full recall /2,801 | R@20 thật |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SubgraphRAG (PPR-2000 từ topic) | 2,783 | 2,000 | 586,981 | 68.50% | 65.15% | 68.06% | 64.73% | 30.63 |
-| GNN-RAG — đầu vào: toàn KG | 2,783 | 129,375 | 8,100,498 | 100.00% | 100.00% | 99.36% | 99.36% | 52.90 |
-| GNN-RAG — node có pred_dist ≠ 0 | 2,783 | 123,332 | — | 100.00% | 100.00% | 99.36% | 99.36% | 52.90 |
+| SubgraphRAG (PPR-2000 từ topic) | 2,783 | 2,000 | 293,469 | 68.50% | 65.15% | 68.06% | 64.73% | 30.63 |
+| GNN-RAG — đầu vào: toàn KG | 2,783 | 129,375 | 4,049,642 | 100.00% | 100.00% | 99.36% | 99.36% | 52.90 |
+| GNN-RAG — node có pred_dist ≠ 0 | 2,783 | 123,332 | 1,878,834 | 100.00% | 100.00% | 99.36% | 99.36% | 52.90 |
 
-Q_valid bỏ 18 query test không có topic (không có subgraph); hai cột "/2,801" tính chúng là 0. avg edge = cạnh cảm sinh trên KG 8,100,498 cạnh, đúng tập triple SubgraphRAG chấm.
+Q_valid bỏ 18 query test không có topic (không có subgraph); hai cột "/2,801" tính chúng là 0. avg edge = cạnh có cả hai đầu trong subgraph trên đồ thị **vô hướng đã gộp** (4,049,642 cặp node, từ 8,100,498 triple có hướng) — đúng định nghĩa notebook QAFD tham chiếu (`ref_qafd/qafd-rag.ipynb` §8), quyết định 24/10 để QAFD vào cùng bảng. (SubgraphRAG thực tế chấm 586,981 triple có hướng mỗi query.)
