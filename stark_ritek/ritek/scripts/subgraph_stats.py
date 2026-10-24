@@ -16,7 +16,9 @@ S của từng dòng:
   - SubgraphRAG: subgraph PPR-2000 từ topic RiTeK (ritek-sgrag-data/test.npz), mọi node đều được chấm.
   - GNN-RAG "đầu vào": toàn KG (129,375 node) cho mọi query có topic.
   - GNN-RAG "điểm khác 0": node có pred_dist ≠ 0 (rearev_test_scores.npy, trước backfill) — đo, không giả định.
+  - QAFD-RAG: support = node có x > 0 (results_w*.jsonl của kernel ritek/kaggle/qafd, câu status success).
 """
+import json
 import sys
 from pathlib import Path
 
@@ -30,6 +32,7 @@ from starkbench.runner import load_queries  # noqa: E402
 
 DS = ROOT / "ritek/outputs/kaggle_data/ritek-sgrag-data"
 GNN_RUNS = [("GNN-RAG (MiniLM, bản chính)", "ritek-gnnrag-rearev-s6")]
+QAFD_RUNS = [("QAFD-RAG (notebook: add, seed topic)", "ritek-qafd-prime")]
 
 
 def undirected_pairs(indptr, indices, n_nodes):
@@ -85,6 +88,16 @@ def main():
         qi = np.load(d / "rearev_test_qids.npy")
         nz = {int(qq): np.flatnonzero(np.asarray(S[i]) != 0) for i, qq in enumerate(qi)}
         rows.append(row(f"{name} — điểm khác 0", nz, gold, N, pairs, V))
+
+    for name, run in QAFD_RUNS:
+        files = sorted((ROOT / "ritek/outputs/kaggle" / run / "prime").glob("results_w*.jsonl"))
+        if not files:
+            print(f"  bỏ qua {name}: chưa có {run}")
+            continue
+        res = [json.loads(line) for f in files for line in open(f, encoding="utf-8")]
+        sup = {int(r["question_id"]): np.array([int(n) for n, _ in r["support"]], dtype=np.int64)
+               for r in res if r["status"] == "success"}
+        rows.append(row(name, sup, gold, N, pairs, V))
 
     print(f"\n| Phương pháp | Q_valid | avg node | avg edge | avg answer recall | full recall rate | "
           f"answer recall /{N:,} | full recall /{N:,} |")
