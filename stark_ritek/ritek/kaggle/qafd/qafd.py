@@ -21,7 +21,7 @@ THÊM: recall theo id node (cột `*_id`) bên cạnh recall theo alias của no
 như các dòng GNN-RAG/SubgraphRAG.
 
 Biến môi trường: STAGES (vd "pharmkg,prime") · PRIME_LIMIT (0 = tất cả) · WORKERS (tiến trình song song, chỉ CPU)
-· DEADLINE_H · EMB_DIR (thư mục output cũ có node_emb để khỏi encode lại) · RESUME_DIR (output cũ: bỏ câu đã chạy)
+· DEADLINE_H · EMB_DIR (thư mục output cũ có node_emb để khỏi encode lại; "auto" = tìm trong /kaggle/input) · RESUME_DIR (output cũ: bỏ câu đã chạy)
 · DATA_DIR · OUT_DIR · REPO_DIR · CODE_SHA. Dataset: ritek-qafd-data (ritek/scripts/prep_qafd_data.py).
 S0 (stage pharmkg): so số tổng hợp với số notebook đã in (NOTEBOOK_PHARMKG) để chứng minh port y hệt.
 """
@@ -481,7 +481,11 @@ def run_stage(ds, data, Retr, counter, device):
 
     encoder = MedCPTDualEncoder(MEDCPT_QUERY_MODEL, MEDCPT_ENTITY_MODEL, device, query_max_len=QUERY_MAX_LEN,
                                 entity_max_len=ENTITY_MAX_LEN, metric=SIM_METRIC)
-    emb_src = Path(os.environ["EMB_DIR"]) / ds if os.environ.get("EMB_DIR") else None
+    emb_dir = os.environ.get("EMB_DIR")
+    if emb_dir == "auto":                       # output kernel trước gắn làm input (job["kernels"])
+        hits = glob.glob(f"/kaggle/input/**/{ds}/node_emb.npy", recursive=True)
+        emb_dir = str(Path(hits[0]).parent.parent) if hits else None
+    emb_src = Path(emb_dir) / ds if emb_dir else None
     if emb_src and (emb_src / "node_emb.npy").exists() and \
             json.loads((emb_src / "node_ids.json").read_text()) == node_ids:
         node_emb = np.load(emb_src / "node_emb.npy")
