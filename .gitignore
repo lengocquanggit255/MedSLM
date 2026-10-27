@@ -40,3 +40,10 @@ HOP/*/inputs/*
 HOP/*/kaggle/package/
 HOP/*/replay_setting_b*/tokenizer_compat/
 HOP/*/replay_setting_b*/test_predictions.jsonl
+
+# Tạm thời (2026-10-27): chỉ commit những gì thuộc HOP. Mọi thứ khác ở gốc repo bị bỏ qua;
+# file đã được git theo dõi từ trước (src/, scripts/, ritek/, ...) vẫn được theo dõi như cũ.
+CLAUDE.md
+/*
+!/.gitignore
+!/HOP/

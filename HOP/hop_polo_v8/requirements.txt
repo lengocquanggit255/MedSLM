@@ -1,0 +1,8 @@
+# Bộ thư viện text ghim của HOP V8 (kernel Kaggle cài đúng các bản này, --no-deps).
+# Torch / NumPy / SciPy / scikit-learn / pandas: dùng bản có sẵn (image Kaggle, hoặc .venv của repo).
+transformers==5.16.1
+huggingface-hub==1.29.0
+tokenizers==0.23.1
+safetensors==0.8.0
+sentence-transformers==5.1.2
+sentencepiece==0.2.1

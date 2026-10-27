@@ -1,0 +1,4 @@
+[{"slug": "ritek-hop-v8-prime-smoke", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "prime", "CONFIG": "smoke", "DEADLINE_H": "2.5",
+           "CODE_SHA": "531fedcf9dda415e1bb6ee45332f3ec7d33e17620924a7a50491ec87ff06a857"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-prime"], "accounts": ["minhlon192"], "timeout": 10800}]

@@ -1,0 +1,12 @@
+{
+  "extends": "default.json",
+  "profile": "smoke",
+  "codebook": {"semantic_steps": 30, "fit_sample": 3000},
+  "synthetic": {"nodes": 300, "edges": 300, "epochs": 1, "patience": 1},
+  "qa_sft": {"epochs": 1, "patience": 1},
+  "policy_warmup": {"epochs": 1, "patience": 1},
+  "policy": {"epochs": 1, "patience": 1},
+  "pool_ranker": {"epochs": 1, "patience": 1},
+  "train_gap_audit_qas": 4,
+  "limits": {"train": 48, "val": 24, "test": 24}
+}
