@@ -1,0 +1,24 @@
+{
+  "source": "hop_polo_v7_final/src",
+  "queries": 1023,
+  "hits_at_1_count": 576,
+  "hits_at_1": 0.5630498533724341,
+  "recall_at_20": 0.777940697295536,
+  "comparison_to_kaggle": {
+    "top1_identical": 1023,
+    "top20_identical": 1023,
+    "pool_identical": 1023,
+    "selected_identical": 1023,
+    "ranked_node_id_order_identical": 1023
+  },
+  "checkpoint_sha256": {
+    "flan_sha256": "b91871f51bdf7c472294dfb497b9e2b4e0a672ba374b7ce69901b71a74519121",
+    "policy_sha256": "377ba40b1000403d2e387938015c89474a7ab75e9f5424e09f9b452dab38fb71",
+    "ranker_sha256": "0a37a27f8fc4e1e40a70e14b32c3042b5eab636ff4777330c8c2b5419374cf77"
+  },
+  "prediction_sha256": "0ff17f7749dada56497b4d9dddeae4d99a9c9eb9d33396f7bf093291d4afc8a2",
+  "metric_recount_matches": true,
+  "source_manifest_sha256_at_replay": "d27d2c0fb7beb320b717dca1b64e98709657d092025d2e756de3894eb3b61136",
+  "source_manifest_sha256_current": "ea65caa21a380408db755566924cc02494856d1e988a18de7e9df57d46ce6697",
+  "post_replay_change": "README documentation only; src/ inference files unchanged"
+}

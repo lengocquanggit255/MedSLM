@@ -1,0 +1,137 @@
+{
+  "protocol": "pharmkg-hop-polo-v7-final-from-scratch-setting-b",
+  "seed": 42,
+  "flan_repo": "google/flan-t5-small",
+  "flan_revision": "0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab",
+  "flan_model_sha256": "495fa51e204676f1a857a9fc13c4c89f3f5ba9f480b898cebca02add25e6d749",
+  "embedding_repo": "sentence-transformers/all-mpnet-base-v2",
+  "embedding_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "embedding_model_sha256": "78c0197b6159d92658e319bc1d72e4c73a9a03dd03815e70e555c5ef05615658",
+  "max_hops": 3,
+  "prefix_s_index": true,
+  "no_g": true,
+  "label_edge_cap": 200,
+  "inference_edge_cap": null,
+  "program_beam": 5,
+  "decoder_length_penalty": 2.0,
+  "path_beam": 30,
+  "local_top_k": 60,
+  "terminal_rescue_slots": 6,
+  "max_pool_nodes": 1200,
+  "codebook": {
+    "backend": "sentence-transformers",
+    "embedding_dim": 128,
+    "semantic_levels": 3,
+    "semantic_codes": 64,
+    "semantic_steps": 300,
+    "structural_codes": 8,
+    "structural_min_edges": 256,
+    "structural_steps": 30,
+    "fit_sample": 30000,
+    "batch_size": 2048,
+    "embedding_batch_size": 32
+  },
+  "synthetic": {
+    "nodes": 10000,
+    "edges": 10000,
+    "batch_size": 16,
+    "learning_rate": 3e-05,
+    "epochs": 24,
+    "patience": 3
+  },
+  "policy_warmup": {
+    "epochs": 24,
+    "patience": 3,
+    "learning_rate": 8e-05
+  },
+  "pool_ranker": {
+    "epochs": 24,
+    "patience": 3,
+    "learning_rate": 0.0002
+  },
+  "qa_sft": {
+    "batch_size": 16,
+    "epochs": 24,
+    "patience": 3,
+    "learning_rate": 3e-05,
+    "programs_per_answer": 3,
+    "paths_per_depth": 32
+  },
+  "selection": {
+    "target": "mean_hits_at_1",
+    "rule": "highest validation Hits@1; exact tie earliest epoch",
+    "early_stopping": "3 consecutive epochs without strict validation Hits@1 gain, independently per phase",
+    "max_update_epochs": 24,
+    "patience": 3,
+    "epoch_0_eligible": true,
+    "technical_validity_only": true
+  },
+  "program_audit": {
+    "flan_top_zero_factor": 5.0,
+    "flan_top_zero_floor": 0.1,
+    "flan_nonzero_beam_floor": 0.5
+  },
+  "proxy_evaluation": {
+    "name": "cold_numeric_score",
+    "candidate_universe": "bounded pre-prune depth-1/2 pool from predicted Flan programs and current edge policy",
+    "ranker_trained": false,
+    "ranker_old_scores_used": false,
+    "program_beam": 5,
+    "path_beam": 30,
+    "local_top_k": 60,
+    "max_pool_nodes": 1200
+  },
+  "policy": {
+    "epochs": 24,
+    "learning_rate": 8e-05,
+    "batch_size": 16,
+    "checkpoint_selection": "highest validation Hits@1 proxy; exact tie earliest epoch",
+    "early_stopping": true,
+    "patience": 3,
+    "early_stopping_scope": "per_branch"
+  },
+  "route_cap_per_answer": 256,
+  "temperature_by_epoch": [
+    1.0,
+    0.927273,
+    0.854545,
+    0.781818,
+    0.709091,
+    0.636364,
+    0.563636,
+    0.490909,
+    0.418182,
+    0.345455,
+    0.272727,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2,
+    0.2
+  ],
+  "loss": {
+    "teacher_ce": 1.0,
+    "node_rank": 0.15,
+    "path": 0.2,
+    "epsilon": 1e-12
+  },
+  "train_gap_audit_qas": 32,
+  "lineage": {
+    "graph": "raw PharmKG only",
+    "flan": "google/flan-t5-small original pinned source",
+    "embedding_model": "all-mpnet-base-v2 original pinned source",
+    "codebook": "freshly trained in this session",
+    "policy_warmup": "fresh initialization in this session",
+    "setting_b": "initialized from selected warm-up of this session",
+    "pool_ranker": "fresh initialization after selected Setting B policy",
+    "test": "one pass after all checkpoints selected and reloaded"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "source_input_manifest_sha256": "5740b7f006320bb6744a46c995cbe12d0c85f1f27bddb4ffbc3194ea0d992f94",
+  "files": 22,
+  "trained_pharmkg_artifacts": false,
+  "allowed_roots": [
+    "raw",
+    "base_model",
+    "embedding_model"
+  ]
+}

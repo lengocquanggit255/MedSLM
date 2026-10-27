@@ -1,0 +1,30 @@
+{
+  "flan_repo": "google/flan-t5-small",
+  "flan_revision": "0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab",
+  "embedding_repo": "sentence-transformers/all-mpnet-base-v2",
+  "embedding_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "files": {
+    "base_model/config.json": "439aa0fecf5a5546a1def68b1fc45e538e2c94528ce805378daf091e2bf6e4de",
+    "base_model/generation_config.json": "f5a1c7e2be8092018d8835128987edf0111637dd98e90599cc80310fef75d95a",
+    "base_model/model.safetensors": "495fa51e204676f1a857a9fc13c4c89f3f5ba9f480b898cebca02add25e6d749",
+    "base_model/special_tokens_map.json": "5c87151ef0f72a99d1f766a4c418bd2a1f90aaa30a8e22fe5eca9641daebb64f",
+    "base_model/spiece.model": "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86",
+    "base_model/tokenizer.json": "fe2ebbbbde2985be723e0ce18217853e4020c5e9d35bd07be2c27ab9d3ead57a",
+    "base_model/tokenizer_config.json": "fcde0f79bffda3688119c94330866a8fbf8de20ae65a8c492c9bd47c704655a0",
+    "embedding_model/1_Pooling/config.json": "a37f83ada23e7887be6b88f4998927dbeac0038af301553c7cd5461413bf1a56",
+    "embedding_model/config.json": "d46a3e04ded82bba22528424480697d394eeda6a27484e08c5bb2bdf5906cfa0",
+    "embedding_model/config_sentence_transformers.json": "061ca9d39661d6c6d6de5ba27f79a1cd5770ea247f8d46412a68a498dc5ac9f3",
+    "embedding_model/model.safetensors": "78c0197b6159d92658e319bc1d72e4c73a9a03dd03815e70e555c5ef05615658",
+    "embedding_model/modules.json": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+    "embedding_model/special_tokens_map.json": "9ef40e9c160511bf3f46ceb71f1471dafa1e9473d5120bb816c36b2efa75f8ba",
+    "embedding_model/tokenizer.json": "b8be2c30ba5dd723a6d5ee26d013da103d5408d92ddcb23747622f9e48f1d842",
+    "embedding_model/tokenizer_config.json": "67f2ff7e223518e729869bb3a70f0caf8368fe549383fc11cfe2dfb42fffc268",
+    "embedding_model/vocab.txt": "dbd90cb94e2247bd4d4ccaecbf616d2290e66691d7d5e5bb81f063c2d0649ada",
+    "raw/ADint_KG.txt": "3bb1834eca96010bc1d0db1a7ecb3c098c2bd2b62d808f984f538e4006e60504",
+    "raw/ADint_test_with_topic_entity.json": "72e59876ee3886ff45cea313eb7a579117a7b3037b8d43c6342f18c5e50cf149",
+    "raw/ADint_train_with_topic_entity.json": "bd29590a9639c9322e5ba4337575d354eb6dacd5f39df316e9b5b18013cb95f9",
+    "raw/edge_type_dict.pkl": "89afb9cea5ca005653b6cb26ec725db7d4a2c911cd3dc7fbd5217102b9f8fd62",
+    "raw/node_info.pkl": "13add1ad78f5f2f038c4fbe2be12213e61f73f2b9cd0ea0a36959849ed9238f2",
+    "raw/node_type_dict.pkl": "da43ca38c6b08ccfd813ef59793a39363dfef4d6965f47d4915449ee629c33f5"
+  }
+}

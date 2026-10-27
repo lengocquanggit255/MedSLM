@@ -32,3 +32,11 @@ venvs/
 # enrichment raw sources (lớn, tải lại được bằng scripts/enrich_download.py)
 data/enrich/sources/**/*
 !data/enrich/sources/manifest.json
+
+# HOP: dữ liệu/trọng số đầu vào, gói Kaggle và bản sao tokenizer đều sinh lại được
+HOP/__MACOSX/
+HOP/*/inputs/*
+!HOP/*/inputs/input_manifest.json
+HOP/*/kaggle/package/
+HOP/*/replay_setting_b*/tokenizer_compat/
+HOP/*/replay_setting_b*/test_predictions.jsonl
