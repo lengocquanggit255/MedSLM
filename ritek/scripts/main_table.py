@@ -1,4 +1,5 @@
 """Bảng kết quả chính RiTeK (test đủ 2,801 query) từ ritek/results/*/*/test/metrics.json.
+Cột f2 = F2 trên cả tập node phương pháp tự trả về (n_native), thay f2@5 từ 2026-10-27.
 
 Chạy: python ritek/scripts/main_table.py      # in markdown, dán vào ritek/PLAN.md §6
 
@@ -22,6 +23,7 @@ MAIN = [("BM25", "bm25/add_rel"),
         ("MoR", "mor/full_rerank"),
         ("GNN-RAG (adapted: toàn KG)", "gnnrag/rearev_fullkg"),
         ("SubgraphRAG", "subgraphrag/orig_none"),
+        ("QAFD-RAG (adapted: notebook, chỉ f2 — D9b)", "qafd/notebook_add", ("f2",)),
         ("ARK", "ark/main")]
 ABLATION = [("MoR traversal, không rerank", "mor/traversal_no_rerank"),
             ("MoR w/o RT", "mor/wo_RT"),
@@ -43,11 +45,12 @@ def table(title, rows):
     print(f"\n**{title}**\n")
     print("| Phương pháp | Biến thể | " + " | ".join(METRICS_REPORT) + " |")
     print("|---|---|" + "---:|" * len(METRICS_REPORT))
-    for name, var in rows:
+    for name, var, *only in rows:          # only: chỉ hiện các metric này (còn lại "—")
         f = ROOT / "ritek/results" / var / "test/metrics.json"
         if f.exists():
             s = json.loads(f.read_text(encoding="utf-8"))["sanitized"]
-            cells = [f"{s[m] * 100:.2f}" for m in METRICS_REPORT]
+            cells = [(f"{s[m] * 100:.3f}" if m == "f2" else f"{s[m] * 100:.2f}") if not only or m in only[0] else "—"
+                     for m in METRICS_REPORT]
         else:
             cells = ["chưa có"] + ["—"] * (len(METRICS_REPORT) - 1)
         print(f"| {name} | `{var}` | " + " | ".join(cells) + " |")

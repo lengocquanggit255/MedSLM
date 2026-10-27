@@ -21,21 +21,21 @@
     "num_rounds": 2,
     "num_reverse_rounds": 2,
     "topic_pe": true,
-    "subgraph": "PPR-2000 (alpha 0.85, 20 v\u00f2ng) t\u1eeb topic RiTeK",
+    "subgraph": "PPR-2000 (alpha 0.85, 20 vòng) từ topic RiTeK",
     "protocol": {
-      "labels": "\u0111\u01b0\u1eddng ng\u1eafn nh\u1ea5t 2 chi\u1ec1u topic<->\u0111\u00e1p \u00e1n theo t\u1eebng c\u1eb7p, nh\u01b0 code g\u1ed1c",
-      "train_edges": "to\u00e0n b\u1ed9 c\u1ea1nh subgraph",
-      "model": "Retriever g\u1ed1c (one-hot 2 chi\u1ec1u, DDE 2 k\u00eanh)",
-      "loop": "train.py g\u1ed1c: val tr\u01b0\u1edbc train, patience 10, seed 42"
+      "labels": "đường ngắn nhất 2 chiều topic<->đáp án theo từng cặp, như code gốc",
+      "train_edges": "toàn bộ cạnh subgraph",
+      "model": "Retriever gốc (one-hot 2 chiều, DDE 2 kênh)",
+      "loop": "train.py gốc: val trước train, patience 10, seed 42"
     },
-    "val_test_edges": "to\u00e0n b\u1ed9 c\u1ea1nh subgraph (kh\u00f4ng l\u1ea5y m\u1eabu)",
-    "dde": "tr\u00ean subgraph \u0111\u1ea7y \u0111\u1ee7",
+    "val_test_edges": "toàn bộ cạnh subgraph (không lấy mẫu)",
+    "dde": "trên subgraph đầy đủ",
     "lm": {
       "model": "Alibaba-NLP/gte-large-en-v1.5",
       "revision": "104333d6af6f97649377c2afbde10a7704870c7b",
-      "attention": "attention th\u01b0\u1eddng (thi\u1ebfu xformers; c\u00f9ng ph\u00e9p t\u00ednh)",
+      "attention": "attention thường (thiếu xformers; cùng phép tính)",
       "encode_sec": 902.7,
-      "text": "t\u00ean node / t\u00ean quan h\u1ec7 / c\u00e2u h\u1ecfi",
+      "text": "tên node / tên quan hệ / câu hỏi",
       "pooling": "CLS + L2",
       "dtype": "fp32",
       "transformers": "4.45.2",
@@ -55,5 +55,6 @@
     "run": "ritek\\outputs\\kaggle\\ritek-sgrag2-none-s1",
     "llm_calls": 0
   },
-  "notes": "SubgraphRAG retriever (kh\u00f4ng LLM): MLP ch\u1ea5m triple trong subgraph PPR-2000, node = max triple k\u1ec1."
+  "notes": "SubgraphRAG retriever (không LLM): MLP chấm triple trong subgraph PPR-2000, node = max triple kề.",
+  "f2_added": "2026-10-27 ritek/scripts/recompute_f2.py (tập n_native dựng lại, f2@5 tái tạo khớp)"
 }

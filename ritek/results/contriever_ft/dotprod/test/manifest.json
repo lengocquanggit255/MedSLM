@@ -17,5 +17,6 @@
     "emb_d": "results/kaggle/stark-mor-emb/candidate_emb.npy",
     "emb_q": "results/kaggle/stark-mor-emb/query_emb_dict.pt"
   },
-  "notes": ""
+  "notes": "",
+  "f2_added": "2026-10-27 ritek/scripts/recompute_f2.py (tập n_native dựng lại, f2@5 tái tạo khớp)"
 }

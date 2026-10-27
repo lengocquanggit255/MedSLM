@@ -79,7 +79,8 @@ def main():
 
         def scores_fn(r):
             q = bm25s.tokenize(r["query"], show_progress=False, return_ids=False)[0]
-            return retriever.get_scores(q).astype(np.float64)
+            s = retriever.get_scores(q).astype(np.float64)
+            return s, int((s > 0).sum())   # tập BM25 tự trả về = tài liệu chung ≥ 1 từ với query (điểm > 0)
 
         res = evaluate_and_save(
             scores_fn, qdf, skb, "bm25", variant, args.split,

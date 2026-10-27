@@ -37,5 +37,6 @@
     "chunk_pool": "top3_mean",
     "run": "ritek\\outputs\\kaggle\\ritek-bgem3-no-rel"
   },
-  "notes": "BGE-M3 dense, c\u1eeda s\u1ed5 8192 token, chunk kh\u00f4ng ch\u1ed3ng l\u1ea5n, pooling=top3_mean."
+  "notes": "BGE-M3 dense, cửa sổ 8192 token, chunk không chồng lấn, pooling=top3_mean.",
+  "f2_added": "2026-10-27 ritek/scripts/recompute_f2.py (tập n_native dựng lại, f2@5 tái tạo khớp)"
 }

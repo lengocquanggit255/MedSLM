@@ -98,7 +98,7 @@ def evaluate_and_save(
 
     `scores_fn(row)` trả về `np.ndarray (n_candidates,)`, hoặc `(scores, n_native)` với phương
     pháp thưa: `n_native` = số node do chính phương pháp trả về, đứng trên phần backfill
-    (`eval.full_score`). n_native quyết định k của f2@k và cột `native@k`.
+    (`eval.full_score`). n_native = kích thước tập "nộp" của f2 (và k của f2@k), cột `native@k`.
 
     Metric được tính trên **full ranking** (đủ 129,375 node). `predictions.parquet` chỉ
     lưu top-1000 để soi lại, không dùng để tính metric.

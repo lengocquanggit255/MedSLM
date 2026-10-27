@@ -41,9 +41,10 @@ def main():
     candidate_ids = list(range(n_cand))
     ev = Evaluator(candidate_ids=candidate_ids)
 
-    # f2@k không thuộc stark_qa -> đối chiếu riêng với công thức 5·tp/(4·G + k), k = min(k, n_native)
-    metrics = [m for m in METRICS if not m.startswith("f2@")]
-    f2s = [m for m in METRICS if m.startswith("f2@")]
+    # f2 / f2@k không thuộc stark_qa -> đối chiếu riêng với công thức 5·tp/(4·G + k):
+    #   f2@k: k = min(k, n_native) · f2: k = n_native (cả tập phương pháp tự trả về; None = mọi candidate)
+    metrics = [m for m in METRICS if not m.startswith("f2")]
+    f2s = ["f2", "f2@5"]
     n_fail = n_ref = 0
     for trial in range(300):
         # mô phỏng cả hai chế độ: chấm điểm đầy đủ, và chấm điểm thưa (top-K)
@@ -79,8 +80,8 @@ def main():
         got_f2 = evaluate_one(full_score(pred, n_cand), answer_ids, f2s, n_native=n_nat)
         ranked = sorted(pred, key=lambda i: (-pred[i], i))
         for m in f2s:
-            k = int(m.split("@")[1])
-            k_eff = min(k, len(ranked))
+            n_sub = len(ranked) if n_nat is not None else n_cand
+            k_eff = n_sub if m == "f2" else min(int(m.split("@")[1]), len(ranked))
             tp = len(set(ranked[:k_eff]) & set(answer_ids.tolist()))
             want_f2 = 5 * tp / (4 * len(set(answer_ids.tolist())) + k_eff)
             if abs(got_f2[m] - want_f2) > 1e-12:
@@ -88,16 +89,19 @@ def main():
                 if n_fail <= 10:
                     print(f"MISMATCH trial={trial} {m}: ours={got_f2[m]:.6f} công thức={want_f2:.6f}")
 
-    # Ca viết tay cho f2@5 khi phương pháp trả ít hơn k node (ngẫu nhiên hiếm khi sinh ra).
-    #   (pred, đáp án, n_native, kỳ vọng)
+    # Ca viết tay khi phương pháp trả ít node (ngẫu nhiên hiếm khi sinh ra).
+    #   (metric, pred, đáp án, n_native, kỳ vọng)
     hand = [
-        ({7: 3.0, 2: 2.0, 9: 1.0}, [2, 9, 40], 3, 5 * 2 / (4 * 3 + 3)),   # m=3, tp=2
-        ({7: 3.0}, [7], 1, 5 * 1 / (4 * 1 + 1)),                         # m=1, đúng 1/1 -> 1.0
-        ({7: 3.0}, [8], 0, 0.0),                                         # m=0: không nộp gì
-        ({i: -i for i in range(10)}, [0, 6], 10, 5 * 1 / (4 * 2 + 5)),    # m>k -> k=5
+        ("f2@5", {7: 3.0, 2: 2.0, 9: 1.0}, [2, 9, 40], 3, 5 * 2 / (4 * 3 + 3)),   # m=3, tp=2
+        ("f2@5", {7: 3.0}, [7], 1, 5 * 1 / (4 * 1 + 1)),                         # m=1, đúng 1/1 -> 1.0
+        ("f2@5", {7: 3.0}, [8], 0, 0.0),                                         # m=0: không nộp gì
+        ("f2@5", {i: -i for i in range(10)}, [0, 6], 10, 5 * 1 / (4 * 2 + 5)),    # m>k -> k=5
+        ("f2", {7: 3.0, 2: 2.0, 9: 1.0}, [2, 9, 40], 3, 5 * 2 / (4 * 3 + 3)),     # cả tập 3 node, tp=2
+        ("f2", {7: 3.0}, [8], 0, 0.0),                                           # m=0
+        ("f2", {i: -i for i in range(10)}, [0, 6], 10, 5 * 2 / (4 * 2 + 10)),     # cả 10 node -> tp=2
     ]
-    for pred, ans, m_nat, want_f2 in hand:
-        got_f2 = evaluate_one(full_score(pred, 50), np.array(ans), ["f2@5"], n_native=m_nat)["f2@5"]
+    for metric, pred, ans, m_nat, want_f2 in hand:
+        got_f2 = evaluate_one(full_score(pred, 50), np.array(ans), [metric], n_native=m_nat)[metric]
         if abs(got_f2 - want_f2) > 1e-12:
             n_fail += 1
             print(f"MISMATCH ca viết tay pred={pred} ans={ans} m={m_nat}: ours={got_f2} kỳ vọng={want_f2}")
@@ -108,7 +112,7 @@ def main():
     print(f"PASS: {n_ref} trial x {len(metrics)} metric ({', '.join(metrics)}) "
           f"khớp stark_qa.Evaluator (sai số < 1e-6)")
     print(f"PASS: 300 trial + {len(hand)} ca viết tay x {', '.join(f2s)} khớp "
-          f"5·tp/(4·G + min(k, n_native)) (sai số < 1e-12)")
+          f"5·tp/(4·G + k) với k = n_native (f2) / min(k, n_native) (f2@k) (sai số < 1e-12)")
 
 
 if __name__ == "__main__":
