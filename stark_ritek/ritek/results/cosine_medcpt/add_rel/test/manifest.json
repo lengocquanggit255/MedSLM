@@ -28,5 +28,6 @@
     "torch": "2.10.0+cu128",
     "dtype": "fp16"
   },
-  "notes": "Kaggle T4x2, chunk 512 kh\u00f4ng ch\u1ed3ng l\u1ea5n, pooling=top3_mean. \u0110i\u1ec3m = cosine (vector \u0111\u00e3 L2-normalize)."
+  "notes": "Kaggle T4x2, chunk 512 không chồng lấn, pooling=top3_mean. Điểm = cosine (vector đã L2-normalize).",
+  "f2_added": "2026-10-27 ritek/scripts/recompute_f2.py (tập n_native dựng lại, f2@5 tái tạo khớp)"
 }

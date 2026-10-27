@@ -48,21 +48,19 @@ Harness dùng chung: `src/starkbench/`. Script dùng chung có cờ `--dataset r
 
 ## 3. Metric — một định nghĩa cho mọi phương pháp
 
-Bộ metric (`eval.METRICS_REPORT`): **F2@5 · Hit@1 · Hit@5 · Recall@10 · Recall@20 · MRR**, macro-average theo query, bản `sanitized`.
+Bộ metric (`eval.METRICS_REPORT`): **F2 · Hit@1 · Hit@5 · Recall@10 · Recall@20 · MRR**, macro-average theo query, bản `sanitized`.
 
-- `F2@5 = 5·tp / (4·G + k)`
-  - **k = min(5, m)**, với m = số node do **chính phương pháp** trả về (`n_native`, chưa tính backfill).
-  - G = số đáp án (ID node, đã bỏ trùng).
-  - tp = số đáp án trong k node đó.
-  - Phương pháp chấm mọi node có m = 129,375 nên k = 5. Query mà phương pháp không trả gì có m = 0 nên F2 = 0.
-  - Không dùng k = m cho phương pháp xếp hạng: m của chúng là 100 (MoR), 2,000 (SubgraphRAG) hay 129,375 (BM25), nên F2 sẽ đo độ dài danh sách chứ không đo chất lượng.
-  - Với phương pháp trả về **tập đáp án** (ARK) có m > 5: quyết định khi tới ARK. Cả hai cách tính được từ output đã lưu.
+- `F2 = 5·tp / (4·G + m)` — **trên CẢ tập node phương pháp tự trả về** (quyết định 2026-10-27, thay F2@5)
+  - m = số node do **chính phương pháp** trả về (`n_native`, chưa tính backfill): MoR 50 · SubgraphRAG ~2,000 (subgraph PPR) · QAFD ~159 (support x > 0) · BM25 = số tài liệu có điểm > 0 (tb 53,158 add_rel / 36,835 no_rel) · dense, Contriever-FT, GNN-RAG chấm mọi node nên m = 129,375 và F2 ≈ 5G/(4G+129,375) ≈ 0.01%.
+  - G = số đáp án (ID node, đã bỏ trùng). tp = số đáp án trong m node đó. m = 0 thì F2 = 0.
+  - F2 do đó đo **chất lượng tập trả về như một subgraph/tập đáp án** (phạt tập lớn), không đo xếp hạng. Phương pháp chỉ xếp hạng (trả mọi node) có F2 gần 0 theo định nghĩa.
+  - Kết quả cũ được bổ sung f2 bằng `ritek/scripts/recompute_f2.py` (dựng lại tập n_native, tái tạo f2@5 đã lưu khớp 0 lệch ở mọi câu); BM25 chấm lại (`run_lexical.py`, n_native = điểm > 0); QAFD chấm qua `ritek/scripts/eval_qafd.py`. F2@5 không còn trong bảng báo cáo.
 - `Hit@k`, `Recall@k` (= |A ∩ top-k| / |A|), `MRR`: tính trên **toàn bộ xếp hạng** 129,375 node, gồm cả backfill.
 - `native@k`: tỉ lệ vị trí trong top-k do chính phương pháp đưa ra.
 
 Kiểm chứng (`scripts/test_parity.py`, 2026-10-16):
 - 296 phép thử × 7 metric khớp `stark_qa.Evaluator` (có recall@10).
-- F2 khớp công thức ở 300 phép thử và 4 ca viết tay (m = 0, 1, 3, 10).
+- F2 khớp công thức ở 300 phép thử và 7 ca viết tay (f2 và f2@5; m = 0, 1, 3, 10) — chạy lại 2026-10-27.
 - Parity chỉ so ở vùng mà mọi ngưỡng cắt nằm trong phần đã chấm điểm (≥ 20 node). Ngoài vùng đó là dải sàn hoà nhau: `torch.topk` chọn tuỳ ý còn ta chọn ID nhỏ trước. Benchmark luôn backfill nên không chấm ở vùng này.
 
 Kết quả rà soát (2026-10-15):
@@ -110,44 +108,45 @@ Mỗi pha cần GPU: smoke test → probe → bảng ước lượng đo thật 
 
 ## 6. Kết quả chính (test, 2,801 query, `sanitized`)
 
-Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). QAFD-RAG không có số xếp hạng (D9b) — chỉ ở bảng subgraph bên dưới.
+Sinh bằng `python ritek/scripts/main_table.py` (quy ước bản chính: Q9). Cột `f2` = F2 trên cả tập node phương pháp tự trả về (§3). QAFD-RAG chỉ báo f2 (D9b).
 
 **Bản chính**
 
-| Phương pháp | Biến thể | f2@5 | hit@1 | hit@5 | recall@10 | recall@20 | mrr |
+| Phương pháp | Biến thể | f2 | hit@1 | hit@5 | recall@10 | recall@20 | mrr |
 |---|---|---:|---:|---:|---:|---:|---:|
-| BM25 | `bm25/add_rel` | 17.93 | 16.39 | 35.13 | 35.00 | 40.42 | 25.10 |
-| MedCPT | `cosine_medcpt/add_rel` | 7.57 | 8.78 | 16.17 | 14.86 | 18.58 | 12.51 |
-| BGE-M3 | `cosine_bgem3/add_rel` | 12.89 | 12.10 | 27.63 | 25.37 | 30.94 | 19.51 |
-| Contriever-FT | `contriever_ft/dotprod` | 22.43 | 24.99 | 45.38 | 43.07 | 50.98 | 34.68 |
-| MoR | `mor/full_rerank` | 31.36 | 36.09 | 59.62 | 56.83 | 63.05 | 46.76 |
-| GNN-RAG (adapted: toàn KG) | `gnnrag/rearev_fullkg` | 24.27 | 25.92 | 44.91 | 46.03 | 52.90 | 34.73 |
-| SubgraphRAG | `subgraphrag/orig_none` | 11.22 | 6.32 | 22.21 | 24.68 | 30.63 | 14.06 |
+| BM25 | `bm25/add_rel` | 0.028 | 16.39 | 35.13 | 35.00 | 40.42 | 25.10 |
+| MedCPT | `cosine_medcpt/add_rel` | 0.010 | 8.78 | 16.17 | 14.86 | 18.58 | 12.51 |
+| BGE-M3 | `cosine_bgem3/add_rel` | 0.010 | 12.10 | 27.63 | 25.37 | 30.94 | 19.51 |
+| Contriever-FT | `contriever_ft/dotprod` | 0.010 | 24.99 | 45.38 | 43.07 | 50.98 | 34.68 |
+| MoR | `mor/full_rerank` | 11.513 | 36.09 | 59.62 | 56.83 | 63.05 | 46.76 |
+| GNN-RAG (adapted: toàn KG) | `gnnrag/rearev_fullkg` | 0.010 | 25.92 | 44.91 | 46.03 | 52.90 | 34.73 |
+| SubgraphRAG | `subgraphrag/orig_none` | 0.421 | 6.32 | 22.21 | 24.68 | 30.63 | 14.06 |
+| QAFD-RAG (adapted: notebook, chỉ f2 — D9b) | `qafd/notebook_add` | 2.752 | — | — | — | — | — |
 | ARK | `ark/main` | chưa có | — | — | — | — | — |
 
 **Ablation / đối chứng**
 
-| Phương pháp | Biến thể | f2@5 | hit@1 | hit@5 | recall@10 | recall@20 | mrr |
+| Phương pháp | Biến thể | f2 | hit@1 | hit@5 | recall@10 | recall@20 | mrr |
 |---|---|---:|---:|---:|---:|---:|---:|
-| MoR traversal, không rerank | `mor/traversal_no_rerank` | 27.25 | 31.13 | 53.34 | 51.49 | 60.14 | 41.53 |
-| MoR w/o RT | `mor/wo_RT` | 27.33 | 30.56 | 53.37 | 51.18 | 60.07 | 41.13 |
-| MoR w/o RS | `mor/wo_RS` | 18.87 | 22.31 | 38.49 | 34.98 | 39.21 | 29.75 |
-| MoR, reranker train lại (đối chứng) | `mor/contriever_retrained_rerank` | 31.05 | 35.42 | 59.23 | 56.89 | 63.08 | 46.12 |
-| MoR + BGE-M3 | `mor/bgem3_rerank` | 23.24 | 25.21 | 45.20 | 41.75 | 46.59 | 34.25 |
-| GNN-RAG + BGE-M3 (dừng ở epoch 42/100) | `gnnrag/rearev_fullkg_bgem3_s2` | 21.77 | 22.21 | 40.06 | 41.67 | 48.41 | 30.71 |
-| SubgraphRAG + pos_weight sqrt (dừng ở epoch 38) | `subgraphrag/orig_sqrt_s2` | 14.33 | 7.25 | 27.95 | 31.03 | 37.31 | 16.88 |
+| MoR traversal, không rerank | `mor/traversal_no_rerank` | 6.767 | 31.13 | 53.34 | 51.49 | 60.14 | 41.53 |
+| MoR w/o RT | `mor/wo_RT` | 6.778 | 30.56 | 53.37 | 51.18 | 60.07 | 41.13 |
+| MoR w/o RS | `mor/wo_RS` | 3.720 | 22.31 | 38.49 | 34.98 | 39.21 | 29.75 |
+| MoR, reranker train lại (đối chứng) | `mor/contriever_retrained_rerank` | 11.513 | 35.42 | 59.23 | 56.89 | 63.08 | 46.12 |
+| MoR + BGE-M3 | `mor/bgem3_rerank` | 8.553 | 25.21 | 45.20 | 41.75 | 46.59 | 34.25 |
+| GNN-RAG + BGE-M3 (dừng ở epoch 42/100) | `gnnrag/rearev_fullkg_bgem3_s2` | 0.010 | 22.21 | 40.06 | 41.67 | 48.41 | 30.71 |
+| SubgraphRAG + pos_weight sqrt (dừng ở epoch 38) | `subgraphrag/orig_sqrt_s2` | 0.421 | 7.25 | 27.95 | 31.03 | 37.31 | 16.88 |
 
 **Phụ lục: độ nhạy corpus và cách gộp chunk**
 
-| Phương pháp | Biến thể | f2@5 | hit@1 | hit@5 | recall@10 | recall@20 | mrr |
+| Phương pháp | Biến thể | f2 | hit@1 | hit@5 | recall@10 | recall@20 | mrr |
 |---|---|---:|---:|---:|---:|---:|---:|
-| BM25 no_rel | `bm25/no_rel` | 13.44 | 12.78 | 27.95 | 26.01 | 31.21 | 19.89 |
-| MedCPT add_rel, gộp max | `cosine_medcpt/add_rel_max` | 9.02 | 9.21 | 19.21 | 17.66 | 22.78 | 14.26 |
-| MedCPT no_rel | `cosine_medcpt/no_rel` | 5.49 | 5.46 | 12.21 | 11.06 | 14.69 | 8.94 |
-| MedCPT no_rel, gộp max | `cosine_medcpt/no_rel_max` | 6.88 | 6.75 | 15.10 | 13.88 | 17.31 | 10.87 |
-| BGE-M3 add_rel, gộp max | `cosine_bgem3/add_rel_max` | 13.00 | 12.07 | 27.92 | 25.63 | 31.32 | 19.59 |
-| BGE-M3 no_rel | `cosine_bgem3/no_rel` | 12.04 | 11.21 | 25.71 | 24.17 | 29.05 | 18.20 |
-| BGE-M3 no_rel, gộp max | `cosine_bgem3/no_rel_max` | 12.07 | 11.21 | 25.71 | 24.12 | 29.12 | 18.17 |
+| BM25 no_rel | `bm25/no_rel` | 0.033 | 12.78 | 27.95 | 26.01 | 31.21 | 19.89 |
+| MedCPT add_rel, gộp max | `cosine_medcpt/add_rel_max` | 0.010 | 9.21 | 19.21 | 17.66 | 22.78 | 14.26 |
+| MedCPT no_rel | `cosine_medcpt/no_rel` | 0.010 | 5.46 | 12.21 | 11.06 | 14.69 | 8.94 |
+| MedCPT no_rel, gộp max | `cosine_medcpt/no_rel_max` | 0.010 | 6.75 | 15.10 | 13.88 | 17.31 | 10.87 |
+| BGE-M3 add_rel, gộp max | `cosine_bgem3/add_rel_max` | 0.010 | 12.07 | 27.92 | 25.63 | 31.32 | 19.59 |
+| BGE-M3 no_rel | `cosine_bgem3/no_rel` | 0.010 | 11.21 | 25.71 | 24.17 | 29.05 | 18.20 |
+| BGE-M3 no_rel, gộp max | `cosine_bgem3/no_rel_max` | 0.010 | 11.21 | 25.71 | 24.12 | 29.12 | 18.17 |
 
 **Kiểm định cặp các phương pháp đứng cạnh nhau** (`scripts/compare.py --results-root ritek/results --dataset ritek`, n = 2,801; McNemar cho Hit@k, bootstrap 10k cho R@20/MRR; 24/10): MoR > GNN-RAG (mọi metric, p < 0.001) · **GNN-RAG ≈ Contriever-FT** (H@1 p 0.40, H@5 p 0.72, R@20 p 0.10, MRR p 0.97 — không kết luận được) · Contriever-FT > BM25 > BGE-M3 > MedCPT (mọi metric, p < 0.001) · MedCPT vs SubgraphRAG trái chiều: MedCPT hơn H@1 (p 0.001), SubgraphRAG hơn H@5/R@20/MRR (p ≤ 0.022). Ablation chưa kiểm định cặp (trừ `orig_none` vs `mlp_none`, P3).
 

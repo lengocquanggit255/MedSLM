@@ -12,7 +12,7 @@
   "topk_stored": 1000,
   "runtime_sec": 211.16,
   "config": {
-    "impl": "A+: ReaRev g\u1ed1c (cmavro/GNN-RAG) tr\u00ean to\u00e0n KG, message g\u1ed9p theo quan h\u1ec7",
+    "impl": "A+: ReaRev gốc (cmavro/GNN-RAG) trên toàn KG, message gộp theo quan hệ",
     "gnnrag_sha": "28d31bc0db3d54f0930e6125f1c98b5b1ace1ba4",
     "code_sha": "6870ce1",
     "best_dev_h1": 0.24254473161033796,
@@ -22,5 +22,6 @@
     "backfill_no_topic": "results/kaggle/stark-enc-medcpt-add-rel-full (medcpt add_rel max)",
     "run": "ritek\\outputs\\kaggle\\ritek-gnnrag-rearev-s2"
   },
-  "notes": "GNN-RAG retriever (ReaRev) \u2014 ch\u1ec9 ph\u1ea7n GNN, kh\u00f4ng LLM. Query kh\u00f4ng topic: backfill, n_native=0."
+  "notes": "GNN-RAG retriever (ReaRev) — chỉ phần GNN, không LLM. Query không topic: backfill, n_native=0.",
+  "f2_added": "2026-10-27 ritek/scripts/recompute_f2.py (tập n_native dựng lại, f2@5 tái tạo khớp)"
 }

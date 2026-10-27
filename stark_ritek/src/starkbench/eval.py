@@ -38,12 +38,12 @@ from typing import Dict, Iterable, List, Sequence
 
 import numpy as np
 
-# 4 metric gốc của STaRK + 2 metric bổ sung (xem docs/PLAN.md §3.3) + recall@10, f2@5 (2026-10-15).
-# Mọi metric trừ f2@k đều có sẵn trong stark_qa.Evaluator -> không tự chế định nghĩa.
-METRICS = ("hit@1", "hit@5", "recall@10", "recall@20", "mrr", "f2@5", "map@20", "rprecision")
+# 4 metric gốc của STaRK + 2 metric bổ sung (xem docs/PLAN.md §3.3) + recall@10 (2026-10-15) + f2 (2026-10-27,
+# thay f2@5). Mọi metric trừ f2 / f2@k đều có sẵn trong stark_qa.Evaluator -> không tự chế định nghĩa.
+METRICS = ("hit@1", "hit@5", "recall@10", "recall@20", "mrr", "f2", "map@20", "rprecision")
 METRICS_STARK = ("hit@1", "hit@5", "recall@20", "mrr")
-# Bộ metric báo cáo chốt 2026-10-15 (ritek/PLAN.md §3).
-METRICS_REPORT = ("f2@5", "hit@1", "hit@5", "recall@10", "recall@20", "mrr")
+# Bộ metric báo cáo (ritek/PLAN.md §3): chốt 2026-10-15, f2@5 -> f2 ngày 2026-10-27.
+METRICS_REPORT = ("f2", "hit@1", "hit@5", "recall@10", "recall@20", "mrr")
 
 # Metric áp dụng bộ lọc `preds > 0` trong torchmetrics: mrr, recall, map.
 # KHÔNG lọc: hit_rate, r_precision, f2.
@@ -55,7 +55,9 @@ METRICS_REPORT = ("f2@5", "hit@1", "hit@5", "recall@10", "recall@20", "mrr")
 # Chỉ phụ thuộc thứ hạng (không lọc dấu điểm) -> tính được từ predictions top-1000 với k <= 1000.
 # Trong `evaluate_one`, k = min(k, n_native): phương pháp tự trả ít hơn k node thì chỉ nộp chừng
 # đó node — phần backfill KHÔNG tính vào F2 (chốt 2026-10-15).
-F2_KS = (5,)   # chốt 2026-10-13: nộp top-5
+# `f2` (2026-10-27, thay f2@5 trong bảng báo cáo): tập "nộp" = TOÀN BỘ m = n_native node phương pháp tự trả về
+# (subgraph / tập ứng viên), F2 = 5·tp / (4·G + m); n_native = None (chấm mọi candidate) -> m = 129,375.
+F2_KS = (5,)   # f2@k: chốt 2026-10-13 nộp top-5; còn dùng ở scripts/compare.py
 
 
 def prf_at_k(hits: np.ndarray, n_gold: int, k: int):
@@ -79,7 +81,7 @@ def evaluate_one(
         metrics: tập metric cần tính.
         n_native: số node do CHÍNH phương pháp trả về (đứng đầu bảng xếp hạng, trên phần
             backfill — `full_score` bảo đảm điều đó). None = phương pháp chấm đủ mọi node.
-            Chỉ ảnh hưởng f2@k; các metric khác tính trên toàn bộ xếp hạng.
+            Chỉ ảnh hưởng f2 / f2@k; các metric khác tính trên toàn bộ xếp hạng.
     """
     order = np.argsort(-scores, kind="stable")  # giảm dần, hoà -> index nhỏ trước
     gold = np.zeros(scores.shape[0], dtype=bool)
@@ -111,6 +113,11 @@ def evaluate_one(
         elif m == "rprecision":
             # Precision@R với R = số đáp án của chính query đó. KHÔNG lọc dấu.
             out[m] = float(ranked_gold[:n_gold].sum() / n_gold) if n_gold else 0.0
+        elif m == "f2":
+            # F2 trên cả tập node phương pháp tự trả về: k = n_native (None = mọi candidate). KHÔNG lọc dấu.
+            k = scores.shape[0] if n_native is None else int(n_native)
+            tp = int(ranked_gold[:k].sum())
+            out[m] = 5.0 * tp / (4 * n_gold + k) if n_gold + k else 0.0
         elif m.startswith("f2@"):
             # F2 = 5·tp / (4·G + k), k = min(k, n_native). KHÔNG lọc dấu (chỉ phụ thuộc thứ hạng).
             k = int(m.split("@")[1])

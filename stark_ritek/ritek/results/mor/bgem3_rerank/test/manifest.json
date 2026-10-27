@@ -14,10 +14,11 @@
   "config": {
     "stage": "rerank.py (sau structure-aware reranker)",
     "pred_file": "ritek/outputs/kaggle/ritek-mor-bgem3/mor_rerank_pred.pkl",
-    "backfill": "contriever_ft dot product, d\u1ecbch xu\u1ed1ng d\u01b0\u1edbi min(MoR)",
+    "backfill": "contriever_ft dot product, dịch xuống dưới min(MoR)",
     "emb_d": "ritek/outputs/kaggle_data/ritek-mor-data/bgem3/nodeemb_no_rel.npy",
     "emb_q": "ritek/outputs/bgem3_query_emb_dict.pt",
     "queries_without_pred": 0
   },
-  "notes": "MoR + BGE-M3 (scorer), reranker train l\u1ea1i tr\u00ean RiTeK train/val, code 53b8416."
+  "notes": "MoR + BGE-M3 (scorer), reranker train lại trên RiTeK train/val, code 53b8416.",
+  "f2_added": "2026-10-27 ritek/scripts/recompute_f2.py (tập n_native dựng lại, f2@5 tái tạo khớp)"
 }
