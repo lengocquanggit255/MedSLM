@@ -1,0 +1,12 @@
+[{"slug": "ritek-hop-v8-prime-s1", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "prime", "CONFIG": "prime", "DEADLINE_H": "11.3",
+           "CODE_SHA": "7b4776ce5eaca629b317ddcbe8bf2ead6b98fd21cd78fa114833dc91f9b9199c"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-prime"], "accounts": ["minhlon192"], "timeout": 43200},
+ {"slug": "ritek-hop-v8-adint-s1", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "adint", "CONFIG": "adint", "DEADLINE_H": "11.3",
+           "CODE_SHA": "7b4776ce5eaca629b317ddcbe8bf2ead6b98fd21cd78fa114833dc91f9b9199c"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-adint"], "accounts": ["minhduonngg"], "timeout": 43200},
+ {"slug": "ritek-hop-v8-pharmkg-s1", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "pharmkg", "CONFIG": "default", "DEADLINE_H": "11.3",
+           "CODE_SHA": "7b4776ce5eaca629b317ddcbe8bf2ead6b98fd21cd78fa114833dc91f9b9199c"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-pharmkg"], "accounts": ["quangminh2401"], "timeout": 43200}]

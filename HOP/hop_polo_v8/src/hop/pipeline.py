@@ -35,7 +35,7 @@ from .codebook import load_codebook, train_codebook
 from .common import digest, dump, jsonl, read_jsonl, seed_all, word_set
 from .data import Graph
 from .flan import decode_programs, initialize_program_tokens, program_distribution, train_batch, train_qa_batch
-from .labels import MAX_HOPS, executable_qa_labels, mine_train_routes, teacher_paths
+from .labels import SUPPORTED_HOPS, executable_qa_labels, mine_train_routes, teacher_paths
 from .policy import FullPolicy, GraphTensors, question_context, teacher_loss
 from .program import EdgeIndex, Executor, ProgramCodec, input_text, make_synthetic_examples
 from .ranker import (PoolRanker, collect_pool, cold_numeric_score, encode_texts, evaluate_ranker,
@@ -76,10 +76,17 @@ def load_config(path: Path) -> dict:
 def check_config(config: dict) -> None:
     if config["protocol"] != "hop-polo-v8":
         raise ValueError("wrong protocol")
-    if config["max_hops"] != MAX_HOPS:
-        raise ValueError(f"max_hops must be {MAX_HOPS}")
+    if config["max_hops"] not in SUPPORTED_HOPS:
+        raise ValueError(f"max_hops must be one of {SUPPORTED_HOPS}")
     if config["graph"]["inverse"] not in ("missing", "always"):
         raise ValueError("graph.inverse must be missing|always")
+    if config["graph"]["action"] not in ("schema", "target"):
+        raise ValueError("graph.action must be schema|target")
+    quotas = config["pool_depth_quotas"]
+    if len(quotas) != config["max_hops"] or min(quotas) < 0 or sum(quotas) > 1 + 1e-9:
+        raise ValueError("pool_depth_quotas: one non-negative share per hop, sum <= 1")
+    if not isinstance(config["pool_last_hop"], bool):
+        raise ValueError("pool_last_hop must be true|false")
     for phase in PHASES:
         if config[phase]["epochs"] < 1 or config[phase]["patience"] < 1:
             raise ValueError(f"{phase} needs >= 1 epoch and patience")
@@ -87,16 +94,49 @@ def check_config(config: dict) -> None:
         raise ValueError("temperature schedule shorter than Setting B epochs")
     if config["path_beam"] - config["terminal_rescue_slots"] < config["program_beam"]:
         raise ValueError("path beam too narrow for program coverage")
+    if not isinstance(config["flan"]["untie_lm_head"], bool):
+        raise ValueError("flan.untie_lm_head must be true|false")
+    if config["selection"]["tie_break"] not in TIE_BREAKS:
+        raise ValueError(f"selection.tie_break must be one of {TIE_BREAKS}")
+
+
+def runtime_versions(device: torch.device) -> dict:
+    """Phiên bản thực chạy (vd hành vi buộc lm_head phụ thuộc phiên bản transformers)."""
+    from importlib import metadata
+    versions = {"python": sys.version.split()[0]}
+    for package in ("torch", "transformers", "tokenizers", "safetensors", "huggingface-hub", "sentence-transformers",
+                    "sentencepiece", "numpy", "scipy", "scikit-learn"):
+        try:
+            versions[package] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            versions[package] = None
+    versions["cuda_device"] = torch.cuda.get_device_name(device) if device.type == "cuda" else None
+    return versions
 
 
 def canonical_sha(value) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def select_hits(rows):
-    """Hits@1 val cao nhất, hoà thì epoch sớm hơn; chỉ xét dòng hợp lệ kỹ thuật."""
+TIE_BREAKS = ("earliest", "recall_at_20")
+
+
+def select_hits(rows, tie_break: str = "earliest"):
+    """Hits@1 val cao nhất; chỉ xét dòng hợp lệ kỹ thuật. Hoà Hits@1: `earliest` (V7) lấy epoch sớm hơn,
+    `recall_at_20` lấy Recall@20 cao hơn rồi mới tới epoch sớm hơn. Early stopping dùng cùng thứ tự này."""
     valid = [row for row in rows if row.get("technical_valid", False)]
-    return max(valid, key=lambda row: (row["validation"]["mean_hits_at_1"], -row["epoch"])) if valid else None
+    if tie_break not in TIE_BREAKS:
+        raise ValueError(tie_break)
+
+    def key(row):
+        v = row["validation"]
+        return v["mean_hits_at_1"], v["mean_recall_at_20"] if tie_break == "recall_at_20" else 0.0, -row["epoch"]
+    return max(valid, key=key) if valid else None
+
+
+def with_teacher(order, teacher) -> list[int]:
+    """Thứ tự câu train của một epoch, bỏ câu không có teacher; RNG vẫn rút như khi đủ câu."""
+    return [int(index) for index in order if teacher[int(index)]]
 
 
 def merge_label_summaries(parts: list[dict]) -> dict:
@@ -143,6 +183,7 @@ class Pipeline:
                 raise AssertionError(f"cached rows differ from questions: {path}")
             return saved["rows"]
         partial = path.with_suffix(".partial.pkl")
+        path.parent.mkdir(parents=True, exist_ok=True)
         rows = []
         if partial.exists():
             saved = pickle.loads(partial.read_bytes())
@@ -154,7 +195,6 @@ class Pipeline:
                 partial.write_bytes(pickle.dumps({"qids": qids[:len(rows)], "rows": rows}))
                 print(f"{label} {index + 1}/{len(questions)}", flush=True)
                 self.clock.need(900, f"{label} {index + 1}/{len(questions)}")
-        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(pickle.dumps({"qids": qids, "rows": rows}))
         partial.unlink(missing_ok=True)
         return rows
@@ -164,13 +204,14 @@ class Pipeline:
         """Vòng epoch V7, nối phiên được. Trả (dòng đã chọn, lịch sử); model được nạp lại checkpoint đã chọn."""
         directory.mkdir(parents=True, exist_ok=True)
         state_path = directory / "state.json"
+        tie_break = self.config["selection"]["tie_break"]
 
         def checkpoint(row, history):
             last = directory / "last"
             shutil.rmtree(last, ignore_errors=True)
             save_model(last)
             row["checkpoint_sha256"] = digest(last / checkpoint_file)
-            best = select_hits(history + [row])
+            best = select_hits(history + [row], tie_break)
             if best is row:
                 shutil.rmtree(directory / "best", ignore_errors=True)
                 shutil.copytree(last, directory / "best")
@@ -214,21 +255,25 @@ class Pipeline:
             self.clock.need((max(durations[-1:] or [0]) * 1.15) + 600, f"{name} epoch {epoch + 1}")
             started = time.perf_counter()
             epoch += 1
+            if self.device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(self.device)
             info, steps = train_one(epoch)
             updates += steps
             trained = time.perf_counter()
             row = evaluate(epoch)
             row.update(epoch=epoch, updates=updates, train=info, seconds=time.perf_counter() - started,
-                       train_seconds=trained - started, eval_seconds=time.perf_counter() - trained)
+                       train_seconds=trained - started, eval_seconds=time.perf_counter() - trained,
+                       cuda_peak_gb=(torch.cuda.max_memory_allocated(self.device) / 1e9
+                                     if self.device.type == "cuda" else None))
             checkpoint(row, history)
             history.append(row)
-            best = select_hits(history)
+            best = select_hits(history, tie_break)
             stale = 0 if best is not None and best["epoch"] == epoch else stale + 1
             v = row["validation"]
             print(f"{name} epoch {epoch}: H1={v['mean_hits_at_1']:.4f} R20={v['mean_recall_at_20']:.4f} "
                   f"best={best['epoch'] if best else None} stale={stale}", flush=True)
             persist(history, stale, updates, finished)
-        selected = select_hits(history)
+        selected = select_hits(history, tie_break)
         if selected is None:
             raise RuntimeError(f"no technically valid {name} checkpoint")
         if digest(directory / "best" / checkpoint_file) != selected["checkpoint_sha256"]:
@@ -260,13 +305,14 @@ class Pipeline:
             raise RuntimeError("a new run needs an empty output directory")
         else:
             dump(run_path, {"identity": identity, "config": config, "created": time.strftime("%Y-%m-%d %H:%M:%S")})
-        self.graph = Graph(args.input, inverse=config["graph"]["inverse"])
+        self.graph = Graph(args.input, inverse=config["graph"]["inverse"], action=config["graph"]["action"])
         if config.get("limits"):
             self.graph.limit_splits(config["limits"])
         self.train, self.val = self.graph.splits["train"], self.graph.splits["val"]
         if any(not q.topics for q in self.train + self.val):
             raise AssertionError("train/val questions need topics")
-        self.save_audit(status="RUNNING", identity=identity, graph=self.graph.audit(),
+        self.save_audit(status="RUNNING", identity=identity, environment=runtime_versions(self.device),
+                        graph=self.graph.audit(),
                         graph_fingerprint=self.graph.fingerprint(), test_answers_loaded=False,
                         training_labels_split="QA train only", checkpoint_selection_split="validation only")
 
@@ -297,7 +343,8 @@ class Pipeline:
         self.proxy_policy = self.load_policy(init)
 
     def new_policy(self) -> FullPolicy:
-        return FullPolicy(len(self.graph.ids), len(self.graph.schemas), self.codebook.size).to(self.device)
+        return FullPolicy(len(self.graph.ids), len(self.graph.schemas), self.codebook.size,
+                          self.config["max_hops"]).to(self.device)
 
     def load_policy(self, path: Path) -> FullPolicy:
         policy = self.new_policy()
@@ -307,7 +354,7 @@ class Pipeline:
     def pool_options(self) -> dict:
         c = self.config
         return {"path_beam": c["path_beam"], "local_k": c["local_top_k"], "rescue_slots": c["terminal_rescue_slots"],
-                "max_nodes": c["max_pool_nodes"]}
+                "max_nodes": c["max_pool_nodes"], "depth_quotas": c["pool_depth_quotas"], "last_hop": c["pool_last_hop"]}
 
     def pool_row(self, policy, q, cache):
         return collect_pool(policy, self.gt, self.graph, q, cache, question_context(self.gt, q), self.terms,
@@ -348,11 +395,14 @@ class Pipeline:
         summary = {"mean_beam_oracle_recall_at_20": float(np.mean([x["oracle_recall_at_20"] for x in diagnostics])),
                    "mean_pool_recall_drop_from_cap": float(np.mean([
                        (x["gold_in_uncapped_pool"] - x["gold_in_capped_pool"]) / x["gold_total"] for x in diagnostics])),
+                   # số đáp án bị trần pool loại, theo độ sâu (để chỉnh pool_depth_quotas bằng số đo trên val)
+                   "pool_cap_drop_by_depth": {depth: sum(x["hard"].get(f"answer_{depth}_cap_drop", 0) for x in diagnostics)
+                                              for depth in ("1hop", "2hop", "3plus_hop")},
                    "mean_beam_nodes": float(np.mean([x["beam_nodes"] for x in diagnostics])),
                    "mean_pool_nodes": float(np.mean([x["pool_nodes"] for x in diagnostics])),
                    "mean_terminal_mass": float(np.mean([x["terminal_probability_mass"] for x in diagnostics])),
-                   "depth_gold": [sum(x["gold_by_depth"][d] for x in diagnostics) for d in range(MAX_HOPS)],
-                   "depth_candidates": [sum(x["candidate_by_depth"][d] for x in diagnostics) for d in range(MAX_HOPS)],
+                   "depth_gold": [sum(x["gold_by_depth"][d] for x in diagnostics) for d in range(self.config["max_hops"])],
+                   "depth_candidates": [sum(x["candidate_by_depth"][d] for x in diagnostics) for d in range(self.config["max_hops"])],
                    "topic_degree_buckets": {bucket: {
                        "queries": sum(x["topic_degree_bucket"] == bucket for x in diagnostics),
                        "beam_gold": sum(x["gold_in_candidates"] for x in diagnostics if x["topic_degree_bucket"] == bucket),
@@ -386,7 +436,8 @@ class Pipeline:
             part = executable_qa_labels(self.graph, self.codebook, self.label_executor, codec,
                                         self.train[start:start + step], cap=config["label_edge_cap"],
                                         programs_per_answer=config["qa_sft"]["programs_per_answer"],
-                                        paths_per_depth=config["qa_sft"]["paths_per_depth"])
+                                        paths_per_depth=config["qa_sft"]["paths_per_depth"],
+                                        max_hops=config["max_hops"])
             part_path.write_bytes(pickle.dumps(part))
             parts.append(part)
             print(f"qa labels {min(start + step, len(self.train))}/{len(self.train)}", flush=True)
@@ -411,14 +462,15 @@ class Pipeline:
         if not (base / "model.safetensors").exists():
             model, tokenizer = self.load_flan(self.args.flan_dir)
             old_vocab = len(tokenizer)
-            ProgramCodec(tokenizer, graph, self.decode_executor, MAX_HOPS)
-            token_audit = initialize_program_tokens(model, tokenizer, old_vocab, seed=self.seed + SEED_OFFSET["flan_tokens"])
+            ProgramCodec(tokenizer, graph, self.decode_executor, config["max_hops"])
+            token_audit = initialize_program_tokens(model, tokenizer, old_vocab, seed=self.seed + SEED_OFFSET["flan_tokens"],
+                                                    untie_lm_head=config["flan"]["untie_lm_head"])
             model.save_pretrained(base, safe_serialization=True)
             tokenizer.save_pretrained(base)
             dump(root / "token_initialization.json", token_audit)
             del model
         model, tokenizer = self.load_flan(base)
-        codec = ProgramCodec(tokenizer, graph, self.decode_executor, MAX_HOPS)
+        codec = ProgramCodec(tokenizer, graph, self.decode_executor, config["max_hops"])
         plans, label_audit, _ = self.qa_labels(codec, root / "labels")
         train_zero_rate = label_audit["shortest_hops"]["0"] / max(1, label_audit["answers"])
         audit_cfg = config["program_audit"]
@@ -437,7 +489,8 @@ class Pipeline:
                                          beam=config["program_beam"], length_penalty=config["decoder_length_penalty"])
                 metrics, predictions, diagnostics = self.proxy_validation(self.proxy_policy, self.val, cached)
                 jsonl(root / phase / "val_predictions" / f"{tag}.jsonl", predictions)
-                distribution = program_distribution(cached, self.val, train_zero_rate=train_zero_rate,
+                distribution = program_distribution(cached, self.val, max_hops=config["max_hops"],
+                                                    train_zero_rate=train_zero_rate,
                                                     zero_factor=audit_cfg["flan_top_zero_factor"],
                                                     zero_floor=audit_cfg["flan_top_zero_floor"],
                                                     nonzero_beam_floor=audit_cfg["flan_nonzero_beam_floor"])
@@ -529,7 +582,7 @@ class Pipeline:
         directory = self.out / "programs"
         if not self.done("programs"):
             model, tokenizer = self.load_flan(self.out / "flan" / "selected")
-            codec = ProgramCodec(tokenizer, self.graph, self.decode_executor, MAX_HOPS)
+            codec = ProgramCodec(tokenizer, self.graph, self.decode_executor, self.config["max_hops"])
             directory.mkdir(parents=True, exist_ok=True)
             shutil.copy2(self.out / "programs_val.jsonl", directory / "val.jsonl")
             train_cache = decode_programs(model, tokenizer, codec, self.graph, self.train, directory / "train.jsonl",
@@ -538,7 +591,8 @@ class Pipeline:
                                           checkpoint=lambda done: self.clock.need(900, f"decode train {done}"))
             flan_done = self.done("flan")
             a = self.config["program_audit"]
-            distribution = program_distribution(train_cache, self.train, train_zero_rate=flan_done["train_zero_answer_rate"],
+            distribution = program_distribution(train_cache, self.train, max_hops=self.config["max_hops"],
+                                                train_zero_rate=flan_done["train_zero_answer_rate"],
                                                 zero_factor=a["flan_top_zero_factor"], zero_floor=a["flan_top_zero_floor"],
                                                 nonzero_beam_floor=a["flan_nonzero_beam_floor"])
             dump(directory / "train_distribution.json", distribution)
@@ -554,7 +608,7 @@ class Pipeline:
         path = self.out / "labels" / "teacher.pkl"
         if path.exists():
             return pickle.loads(path.read_bytes())
-        result = teacher_paths(self.graph, self.train)
+        result = teacher_paths(self.graph, self.train, self.config["max_hops"])
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(pickle.dumps(result))
         dump(self.out / "labels" / "teacher_depths.json", result[1])
@@ -590,7 +644,7 @@ class Pipeline:
             return
         directory = self.out / "warmup"
         settings = self.config["policy_warmup"]
-        teacher, _ = self.teacher()
+        teacher, depths = self.teacher()
         holder, save_model, load_model = self.policy_holder(self.out / "policy_init.pt")
         seed_all(self.seed + SEED_OFFSET["warmup"])
         optimizer = torch.optim.AdamW(holder["policy"].parameters(), lr=settings["learning_rate"])
@@ -600,15 +654,14 @@ class Pipeline:
         def train_one(epoch):
             policy = holder["policy"]
             policy.train()
-            order = rng.permutation(len(self.train))
+            order = with_teacher(rng.permutation(len(self.train)), teacher)
             optimizer.zero_grad(set_to_none=True)
             losses, pending, steps = [], 0, 0
             for pos, index in enumerate(order, 1):
-                index = int(index)
                 q = self.train[index]
                 chosen = teacher[index][(epoch - 1 + index) % len(teacher[index])]
                 ce, rank = teacher_loss(policy, self.gt, self.graph, self.codebook, q, chosen,
-                                        question_context(self.gt, q), self.device, MAX_HOPS)
+                                        question_context(self.gt, q), self.device)
                 loss = ce + weight * rank
                 (loss / settings["batch_size"]).backward()
                 pending += 1
@@ -634,6 +687,8 @@ class Pipeline:
         mismatch = policy_program_mismatch(self.graph, self.codebook, self.train, teacher, self.train_cache)
         dump(directory / "policy_program_mismatch.json", mismatch)
         self.mark_done("warmup", {"selected_epoch": selected["epoch"], "selected_updates": selected["updates"],
+                                  "teacher_answers_without_route": depths.get("none", 0),
+                                  "train_questions_without_teacher": sum(not choices for choices in teacher),
                                   "checkpoint_sha256": digest(directory / "best" / "policy.pt"),
                                   "validation": selected["validation"], "program_mismatch_audit": mismatch})
 
@@ -665,17 +720,16 @@ class Pipeline:
         def train_one(epoch):
             policy = holder["policy"]
             policy.train()
-            order = rng.permutation(len(self.train))
+            order = with_teacher(rng.permutation(len(self.train)), teacher)
             optimizer.zero_grad(set_to_none=True)
             component, pending, steps = Counter(), 0, 0
             tau = temperatures[epoch - 1]
             for pos, index in enumerate(order, 1):
-                index = int(index)
                 q = self.train[index]
                 qctx = question_context(self.gt, q)
                 chosen = teacher[index][(epoch - 1 + index) % len(teacher[index])]
                 ce, node_rank = teacher_loss(policy, self.gt, self.graph, self.codebook, q, chosen, qctx,
-                                             self.device, MAX_HOPS)
+                                             self.device)
                 marginal, soft_mass, eligible = question_path_loss(
                     policy, self.gt, q, self.train_cache[index], qctx, routes[index], mode="B", tau=tau,
                     path_beam=config["path_beam"], local_k=config["local_top_k"],
@@ -697,7 +751,7 @@ class Pipeline:
                     pending = 0
                     steps += 1
             for name in ("teacher_ce", "node_rank", "marginal", "soft_mass", "total"):
-                component[name] /= len(self.train)
+                component[name] /= len(order)
             component["grad_norm_mean"] = component.pop("grad_norm_sum") / max(1, steps)
             return dict(component), steps
 
@@ -758,7 +812,8 @@ class Pipeline:
         del flan
         settings = config["pool_ranker"]
         seed_all(self.seed + SEED_OFFSET["ranker"])
-        holder = {"ranker": PoolRanker(tables["node_text"], tables["relation_text"], graph.types).to(device)}
+        holder = {"ranker": PoolRanker(tables["node_text"], tables["relation_text"], graph.types,
+                                       self.config["max_hops"]).to(device)}
         optimizer = torch.optim.AdamW(holder["ranker"].parameters(), lr=settings["learning_rate"],
                                       weight_decay=settings["weight_decay"])
         rng = np.random.default_rng(self.seed + SEED_OFFSET["ranker"])
@@ -810,7 +865,7 @@ class Pipeline:
         flan.eval()
         policy = self.load_policy(policy_file)
         state = torch.load(ranker_file, map_location="cpu", weights_only=True)
-        ranker = PoolRanker(state["node_text"], state["relation_text"], graph.types).to(device)
+        ranker = PoolRanker(state["node_text"], state["relation_text"], graph.types, config["max_hops"]).to(device)
         ranker.load_state_dict(state)
         ranker.eval()
         locked = {"flan_sha256": digest(flan_dir / "model.safetensors"),
@@ -827,7 +882,7 @@ class Pipeline:
             raise AssertionError("selected checkpoint hash changed before test")
         dump(directory / "checkpoint_lock.json", locked)
         # Sinh chương trình chỉ dùng câu hỏi/topic; đáp án vẫn chưa được đọc.
-        codec = ProgramCodec(tokenizer, graph, self.decode_executor, MAX_HOPS)
+        codec = ProgramCodec(tokenizer, graph, self.decode_executor, config["max_hops"])
         test_unlabelled = graph.splits["test"]
         test_cache = decode_programs(flan, tokenizer, codec, graph, test_unlabelled, directory / "program_cache.jsonl",
                                      device, beam=config["program_beam"], length_penalty=config["decoder_length_penalty"],
@@ -841,7 +896,7 @@ class Pipeline:
         a = config["program_audit"]
         dump(directory / "program_distribution.json",
              program_distribution([c for c, q in zip(test_cache, test) if q.topics], labelled,
-                                  train_zero_rate=self.done("flan")["train_zero_answer_rate"],
+                                  max_hops=config["max_hops"], train_zero_rate=self.done("flan")["train_zero_answer_rate"],
                                   zero_factor=a["flan_top_zero_factor"], zero_floor=a["flan_top_zero_floor"],
                                   nonzero_beam_floor=a["flan_nonzero_beam_floor"]))
         by_qid = {row["qid"]: row for row in test_cache}
@@ -861,7 +916,7 @@ class Pipeline:
                                 "metrics": {k: metrics[k] for k in ("mean_hits_at_1", "mean_recall_at_20",
                                                                     "mean_pool_recall", "mean_f2_set", "queries")}})
 
-    def run(self) -> None:
+    def run(self, stop_after: str | None = None) -> None:
         started = time.perf_counter()
         self.prepare()
         for stage in (self.stage_codebook, self.stage_flan, self.stage_programs, self.stage_warmup,
@@ -872,6 +927,11 @@ class Pipeline:
             times = self.audit.get("stage_seconds", {})
             times[name] = times.get(name, 0.0) + time.perf_counter() - mark
             self.save_audit(stage_seconds=times)
+            if name == stop_after:
+                # Chạy một phần (vd ablation chỉ stage Flan); chạy tiếp được bằng --resume không có --stop-after.
+                self.save_audit(status=f"STOPPED_AFTER_{name}", session_seconds=time.perf_counter() - started)
+                print(f"HOP V8 stopped after stage {name}", flush=True)
+                return
         self.save_audit(status="COMPLETE", session_seconds=time.perf_counter() - started)
         m = self.done("test")["metrics"]
         print(f"HOP V8 COMPLETE: test H1={m['mean_hits_at_1']:.4f} R20={m['mean_recall_at_20']:.4f}", flush=True)
@@ -888,13 +948,14 @@ def main(argv=None) -> int:
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--deadline-hours", type=float, default=None)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--stop-after", choices=("codebook", "flan", "programs", "warmup", "setting_b", "ranker"))
     args = parser.parse_args(argv)
     config = load_config(args.config)
     check_config(config)
     args.output.mkdir(parents=True, exist_ok=True)
     pipeline = Pipeline(args, config)
     try:
-        pipeline.run()
+        pipeline.run(stop_after=args.stop_after)
     except Pause as pause:
         pipeline.save_audit(status="PAUSED", paused_at=str(pause))
         print(f"HOP V8 PAUSED at {pause}; rerun with --resume on a copy of this output", flush=True)

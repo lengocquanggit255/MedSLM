@@ -1,0 +1,90 @@
+{
+ "splits": [
+  "train",
+  "val"
+ ],
+ "questions": 5025,
+ "metapaths_per_question": 1.57,
+ "metapaths_valid_%": 89.8,
+ "questions_with_valid_metapath_%": 94.5,
+ "questions_with_metapath_from_topic_type_%": 56.5,
+ "topic_named_in_restriction_%": 29.0,
+ "by_bfs_depth": {
+  "0": {
+   "answers": 135,
+   "bfs_ambiguous_%": 0.0,
+   "mor_from_topic_reaches_%": 1.5,
+   "mor_any_anchor_reaches_%": 28.9,
+   "reached_only_from_other_anchor_%": 27.4,
+   "  of_which_1hop_%": 94.6,
+   "mor_from_topic_same_seq_as_bfs_%": 0.0,
+   "when_reached_len_eq_bfs_%": 0.0,
+   "when_reached_len_gt_bfs_%": 0.0,
+   "mor_topic_paths_all_shorter_than_bfs_%": 0.0,
+   "ambiguous_and_reached_mor_picks_bfs_seq_%": null
+  },
+  "1": {
+   "answers": 5494,
+   "bfs_ambiguous_%": 0.5,
+   "mor_from_topic_reaches_%": 74.8,
+   "mor_any_anchor_reaches_%": 62.9,
+   "reached_only_from_other_anchor_%": 5.1,
+   "  of_which_1hop_%": 92.9,
+   "mor_from_topic_same_seq_as_bfs_%": 74.3,
+   "when_reached_len_eq_bfs_%": 99.4,
+   "when_reached_len_gt_bfs_%": 0.6,
+   "mor_topic_paths_all_shorter_than_bfs_%": 0.0,
+   "ambiguous_and_reached_mor_picks_bfs_seq_%": 100.0
+  },
+  "2": {
+   "answers": 3986,
+   "bfs_ambiguous_%": 22.2,
+   "mor_from_topic_reaches_%": 5.0,
+   "mor_any_anchor_reaches_%": 33.3,
+   "reached_only_from_other_anchor_%": 29.4,
+   "  of_which_1hop_%": 88.0,
+   "mor_from_topic_same_seq_as_bfs_%": 5.0,
+   "when_reached_len_eq_bfs_%": 100.0,
+   "when_reached_len_gt_bfs_%": 0.0,
+   "mor_topic_paths_all_shorter_than_bfs_%": 32.2,
+   "ambiguous_and_reached_mor_picks_bfs_seq_%": 100.0
+  },
+  "3": {
+   "answers": 3428,
+   "bfs_ambiguous_%": 52.7,
+   "mor_from_topic_reaches_%": 0.0,
+   "mor_any_anchor_reaches_%": 29.9,
+   "reached_only_from_other_anchor_%": 29.9,
+   "  of_which_1hop_%": 82.6,
+   "mor_from_topic_same_seq_as_bfs_%": 0.0,
+   "when_reached_len_eq_bfs_%": null,
+   "when_reached_len_gt_bfs_%": null,
+   "mor_topic_paths_all_shorter_than_bfs_%": 38.2,
+   "ambiguous_and_reached_mor_picks_bfs_seq_%": null
+  },
+  "None": {
+   "answers": 23,
+   "bfs_ambiguous_%": 0.0,
+   "mor_from_topic_reaches_%": 0.0,
+   "mor_any_anchor_reaches_%": 0.0,
+   "reached_only_from_other_anchor_%": 0.0,
+   "  of_which_1hop_%": null,
+   "mor_from_topic_same_seq_as_bfs_%": 0.0,
+   "when_reached_len_eq_bfs_%": null,
+   "when_reached_len_gt_bfs_%": null,
+   "mor_topic_paths_all_shorter_than_bfs_%": 0.0,
+   "ambiguous_and_reached_mor_picks_bfs_seq_%": null
+  }
+ },
+ "reached_set_size_from_topic": {
+  "mor_metapath_p50_p90": [
+   6.0,
+   100.0
+  ],
+  "bfs_cheapest_typelevel_p50_p90": [
+   34.0,
+   8152.000000000033
+  ]
+ },
+ "seconds": 631.9
+}

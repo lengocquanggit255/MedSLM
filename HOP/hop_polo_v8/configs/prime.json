@@ -1,0 +1,18 @@
+{
+  "extends": "default.json",
+  "selection": {"tie_break": "recall_at_20",
+                "rule": "highest validation Hits@1; Hits@1 tie -> higher Recall@20, then earliest epoch",
+                "early_stopping": "patience consecutive epochs without a gain in (Hits@1, then Recall@20), per phase"},
+  "synthetic": {"patience": 5},
+  "qa_sft": {"patience": 5},
+  "policy_warmup": {"patience": 5},
+  "policy": {"patience": 5},
+  "pool_ranker": {"patience": 5},
+  "variant": "PrimeKG theo EDA (quyết định 2026-10-27/28): trần nhãn 500; hub ~15k cạnh cùng schema nên local_top_k 250, path_beam 60, pool 3000 gồm cả hop cuối; quota theo tỉ lệ đáp án 42,1/30,5/26,2%",
+  "label_edge_cap": 500,
+  "local_top_k": 250,
+  "path_beam": 60,
+  "max_pool_nodes": 3000,
+  "pool_depth_quotas": [0.43, 0.31, 0.26],
+  "pool_last_hop": true
+}

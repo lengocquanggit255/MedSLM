@@ -1,0 +1,8 @@
+[{"slug": "ritek-hop-v8-pharmkg-flan-tied", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "pharmkg", "CONFIG": "tied", "STOP_AFTER": "flan", "DEADLINE_H": "11.3",
+           "CODE_SHA": "407e490de9360a76283781e4b0aae6100304df763b7a282b43d9905baca28f61"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-pharmkg"], "accounts": ["minhduonngg"], "timeout": 43200},
+ {"slug": "ritek-hop-v8-pharmkg-flan-untied", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "pharmkg", "CONFIG": "default", "STOP_AFTER": "flan", "DEADLINE_H": "11.3",
+           "CODE_SHA": "407e490de9360a76283781e4b0aae6100304df763b7a282b43d9905baca28f61"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-pharmkg"], "accounts": ["tienthanhahihi"], "timeout": 43200}]

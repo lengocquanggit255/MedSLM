@@ -8,12 +8,16 @@ import numpy as np
 from .program import program_from_dict
 
 
-def question_hard_audit(graph, q, trace, pool_nodes) -> dict:
-    """Đáp án 1/2 hop có lọt pool không; nếu trượt thì trượt ở bước nào (local-60, beam, trần pool)."""
+def question_hard_audit(graph, q, trace, pool_nodes, uncapped_nodes) -> dict:
+    """Đáp án 1/2 hop có lọt pool không; nếu trượt thì trượt ở bước nào (top-local_k, beam, trần pool).
+
+    `answer_<độ sâu>_cap_drop`: đáp án có trong pool trước khi cắt nhưng bị trần pool loại, theo từng độ sâu.
+    """
     pre1 = {s.nodes[-1] for s in trace.pre[0]}
     alive1 = {s.nodes[-1] for s in trace.by_depth[0]}
     pre2 = {s.nodes[-1] for s in trace.pre[1]}
     pool = set(pool_nodes)
+    dropped = set(uncapped_nodes) - pool
     counts = Counter()
     counts["search_ms"] = trace.search_ms
     counts["pool_nodes"] = len(pool)
@@ -36,7 +40,8 @@ def question_hard_audit(graph, q, trace, pool_nodes) -> dict:
         if answer in first:
             counts["answer_1hop"] += 1
             counts["answer_1hop_pool"] += int(answer in pool)
-            counts["answer_1hop_local60"] += int(answer in pre1)
+            counts["answer_1hop_localk"] += int(answer in pre1)
+            counts["answer_1hop_cap_drop"] += int(answer in dropped)
             continue
         incoming = {int(graph.src[int(graph.reverse_order[j])])
                     for j in range(int(graph.reverse_indptr[answer]), int(graph.reverse_indptr[answer + 1]))}
@@ -44,18 +49,20 @@ def question_hard_audit(graph, q, trace, pool_nodes) -> dict:
         if not gold_mid:
             counts["answer_3plus_hop"] += 1
             counts["answer_3plus_hop_pool"] += int(answer in pool)
+            counts["answer_3plus_hop_cap_drop"] += int(answer in dropped)
             continue
         counts["answer_2hop"] += 1
         counts["answer_2hop_pool"] += int(answer in pool)
+        counts["answer_2hop_cap_drop"] += int(answer in dropped)
         counts["answer_2hop_mid_survived"] += int(bool(gold_mid & alive1))
-        counts["answer_2hop_edge_local60"] += int(answer in pre2 and bool(gold_mid & alive1))
+        counts["answer_2hop_edge_localk"] += int(answer in pre2 and bool(gold_mid & alive1))
         if answer not in pool:
             if not gold_mid & pre1:
-                counts["miss_first_local60"] += 1
+                counts["miss_first_localk"] += 1
             elif not gold_mid & alive1:
                 counts["miss_first_beam"] += 1
             elif answer not in pre2:
-                counts["miss_second_local60"] += 1
+                counts["miss_second_localk"] += 1
             else:
                 counts["miss_pool_cap"] += 1
     return dict(counts)

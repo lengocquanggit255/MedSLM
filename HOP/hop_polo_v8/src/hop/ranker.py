@@ -17,7 +17,6 @@ from torch.nn import functional as F
 
 from .audit import question_hard_audit
 from .common import word_set
-from .labels import MAX_HOPS
 from .search import coverage_diagnostics, pool_candidates
 
 TOP_K = 20
@@ -32,8 +31,8 @@ NUMERIC_DIM = ROUTE0 + 5 * PATHS_PER_NODE
 class PoolRow:
     nodes: np.ndarray            # ID cục bộ
     numeric: np.ndarray          # [N, NUMERIC_DIM] float16
-    relation_paths: np.ndarray   # [N, 3 route, 3 hop] int16
-    path_nodes: np.ndarray       # [N, MAX_HOPS + 1] nút trên route tốt nhất
+    relation_paths: np.ndarray   # [N, 3 route, max_hops] int16
+    path_nodes: np.ndarray       # [N, max_hops + 1] nút trên route tốt nhất
     final_nodes: int
     edges_scored: int
     search_ms: float
@@ -42,10 +41,10 @@ class PoolRow:
     search_diagnostics: dict | None = None
 
 
-def empty_pool(cache: dict) -> PoolRow:
+def empty_pool(cache: dict, max_hops: int) -> PoolRow:
     """Câu không có topic: không có pool; vẫn được tính vào mẫu số (chấm bằng backfill khi qua harness)."""
     return PoolRow(np.empty(0, np.int32), np.empty((0, NUMERIC_DIM), np.float16),
-                   np.empty((0, PATHS_PER_NODE, MAX_HOPS), np.int16), np.empty((0, MAX_HOPS + 1), np.int32),
+                   np.empty((0, PATHS_PER_NODE, max_hops), np.int16), np.empty((0, max_hops + 1), np.int32),
                    0, 0, 0.0, float(cache.get("generation_ms", 0.0)), int(cache.get("decoder_edges_examined", 0)),
                    None)
 
@@ -58,19 +57,21 @@ def cold_numeric_score(numeric) -> np.ndarray:
 
 
 @torch.inference_mode()
-def collect_pool(policy, gt, graph, q, cache, qctx, terms, *, path_beam, local_k, rescue_slots, max_nodes) -> PoolRow:
-    """Dựng cùng một pool có trần, trước khi cắt (độ sâu 1-2), cho mọi split QA."""
+def collect_pool(policy, gt, graph, q, cache, qctx, terms, *, path_beam, local_k, rescue_slots, max_nodes,
+                 depth_quotas, last_hop) -> PoolRow:
+    """Dựng cùng một pool có trần (ứng viên trước khi cắt beam, xem `search`) cho mọi split QA."""
+    max_hops = policy.max_hops
     if not q.topics:
-        return empty_pool(cache)
+        return empty_pool(cache, max_hops)
     name_terms, text_terms, relation_terms = terms
     started = time.perf_counter()
     nodes, evidence, routes, final_nodes, uncapped_nodes, trace = pool_candidates(
         policy, gt, q, cache, qctx, path_beam=path_beam, local_k=local_k, rescue_slots=rescue_slots,
-        maximum=max_nodes)
+        maximum=max_nodes, depth_quotas=depth_quotas, last_hop=last_hop)
     qterms = word_set(q.question)
     n_rel = len(graph.relation_names)
-    relation_paths = np.full((len(nodes), PATHS_PER_NODE, MAX_HOPS), -1, dtype=np.int16)
-    path_nodes = np.full((len(nodes), MAX_HOPS + 1), -1, dtype=np.int32)
+    relation_paths = np.full((len(nodes), PATHS_PER_NODE, max_hops), -1, dtype=np.int16)
+    path_nodes = np.full((len(nodes), max_hops + 1), -1, dtype=np.int32)
     numeric = np.zeros((len(nodes), NUMERIC_DIM), dtype=np.float32)
     for index, node in enumerate(nodes):
         candidates = sorted(routes[node].values(), key=lambda row: (-row[0], row[1], row[3]))
@@ -88,14 +89,14 @@ def collect_pool(policy, gt, graph, q, cache, qctx, terms, *, path_beam, local_k
                     if rank == 0:
                         best_rel_terms.update(relation_terms[rel_id])
             offset = ROUTE0 + 5 * rank
-            numeric[index, offset:offset + 5] = (max(-30.0, score) / 30.0, len(edges) / MAX_HOPS,
+            numeric[index, offset:offset + 5] = (max(-30.0, score) / 30.0, len(edges) / max_hops,
                                                  sum(matches) / max(1, len(matches)),
                                                  sum(backoffs) / max(1, 3 * len(backoffs)), float(not final))
         numeric[index, SCORE] = max(-30.0, best[0]) / 30.0
-        numeric[index, DEPTH] = best_depth / MAX_HOPS
+        numeric[index, DEPTH] = best_depth / max_hops
         numeric[index, MATCH] = sum(best[5]) / max(1, best_depth)
         numeric[index, BACKOFF] = sum(best[4]) / max(1, 3 * best_depth)
-        numeric[index, OFF_ACTION] = (best_depth - sum(best[5])) / MAX_HOPS
+        numeric[index, OFF_ACTION] = (best_depth - sum(best[5])) / max_hops
         numeric[index, FINAL] = float(node in final_nodes)
         numeric[index, ROUTES] = math.log1p(len(candidates)) / 5
         numeric[index, PROGRAMS] = len({route[1] for route in candidates}) / 5
@@ -114,7 +115,7 @@ def collect_pool(policy, gt, graph, q, cache, qctx, terms, *, path_beam, local_k
                             "pool_nodes": len(nodes), "gold_in_uncapped_pool": len(set(q.answers) & uncapped_nodes),
                             "gold_in_capped_pool": len(set(q.answers) & set(nodes)),
                             "terminal_rescue_slots": trace.slots.get(-1, 0),
-                            "hard": question_hard_audit(graph, q, trace, nodes)})
+                            "hard": question_hard_audit(graph, q, trace, nodes, uncapped_nodes)})
     return PoolRow(np.asarray(nodes, dtype=np.int32), numeric.astype(np.float16), relation_paths, path_nodes,
                    len(final_nodes), trace.edges_scored, (time.perf_counter() - started) * 1000,
                    float(cache["generation_ms"]), int(cache["decoder_edges_examined"]), diagnostics)
@@ -148,8 +149,9 @@ def encode_texts(model, tokenizer, values, device, batch_size=32, max_length=96,
 class PoolRanker(nn.Module):
     """Điểm lạnh cố định + Δ từ văn bản Flan (câu hỏi, nút) và đường quan hệ có thứ tự."""
 
-    def __init__(self, node_text, relation_text, node_types):
+    def __init__(self, node_text, relation_text, node_types, max_hops: int):
         super().__init__()
+        self.max_hops = max_hops
         self.register_buffer("node_text", node_text.float())
         self.register_buffer("relation_text", relation_text.float())
         self.register_buffer("node_types", torch.as_tensor(node_types, dtype=torch.long))
@@ -157,7 +159,7 @@ class PoolRanker(nn.Module):
         self.q_project = nn.Sequential(nn.Linear(width, 96), nn.LayerNorm(96), nn.Tanh())
         self.n_project = nn.Sequential(nn.Linear(width, 96), nn.LayerNorm(96), nn.Tanh())
         self.r_project = nn.Sequential(nn.Linear(width, 48), nn.Tanh())
-        self.path_project = nn.Sequential(nn.Linear(MAX_HOPS * 48, 96), nn.Tanh())
+        self.path_project = nn.Sequential(nn.Linear(max_hops * 48, 96), nn.Tanh())
         self.type_embed = nn.Embedding(int(max(node_types)) + 1, 12)
         # q, nút, đường, q*nút, |q-nút|, q*đường, loại, số
         self.delta = nn.Sequential(nn.Linear(6 * 96 + 12 + NUMERIC_DIM, 192), nn.ReLU(),
@@ -322,7 +324,7 @@ def evaluate_ranker(ranker, rows, questions, question_text, text_ms, graph, devi
     metrics = {f"mean_{key}": float(np.mean(values)) for key, values in values_by_metric.items()}
     for key in ("selected_nodes_count", "pool_nodes_count", "latency_ms", "edges_scored"):
         metrics[f"p95_{key}"] = float(np.percentile(values_by_metric[key], 95))
-    metrics.update({"queries": len(rows), "top_k": TOP_K, "max_hops": MAX_HOPS,
+    metrics.update({"queries": len(rows), "top_k": TOP_K, "max_hops": ranker.max_hops,
                     "queries_without_topic": sum(not q.topics for q in questions),
                     "gold_answers_outside_pool_total": int(sum(values_by_metric["gold_outside_pool"])),
                     "gold_answers_outside_subgraph_total": int(sum(values_by_metric["gold_outside_subgraph"])),

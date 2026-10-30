@@ -12,6 +12,12 @@ Bundle (một thư mục cho mỗi bộ dữ liệu):
 Khác V7: cạnh ngược chỉ được thêm cho triple chưa có chiều ngược trong KG (`inverse="missing"`).
 PrimeKG lưu sẵn cả hai chiều cho 100% triple, nên V7 nhân đôi số cạnh mà không thêm đường đi nào.
 `inverse="always"` tái tạo đúng đồ thị V7 (dùng cho test tương đương).
+
+Action của một cạnh: `action="schema"` (V7) = (loại nguồn, quan hệ, chiều, loại đích); `action="target"` bỏ loại
+nguồn. Khi các topic của câu cùng loại, mọi frontier khi thực thi chỉ gồm một loại nút (loại topic, rồi loại đích
+của action trước), nên loại nguồn luôn đã biết và hai cách chọn đúng cùng tập cạnh. Câu có topic khác loại (ADint:
+2,9% câu train) thì hop đầu với "target" lấy tập cạnh rộng hơn (cạnh từ mọi topic). "target" giảm số token action
+(ADint: 16.732 -> 1.395).
 """
 from __future__ import annotations
 
@@ -47,9 +53,11 @@ def verify_bundle(root: Path) -> dict:
 
 
 class Graph:
-    def __init__(self, root: str | Path, *, inverse: str = "missing", verify: bool = True):
+    def __init__(self, root: str | Path, *, inverse: str = "missing", action: str = "schema", verify: bool = True):
         if inverse not in ("missing", "always"):
             raise ValueError(inverse)
+        if action not in ("schema", "target"):
+            raise ValueError(action)
         root = Path(root)
         self.root = root
         self.manifest = verify_bundle(root) if verify else json.loads(
@@ -110,10 +118,13 @@ class Graph:
         np.add.at(self.reverse_indptr, self.dst + 1, 1)
         np.cumsum(self.reverse_indptr, out=self.reverse_indptr)
         n_types = len(self.type_names)
-        packed = (((self.types[self.src].astype(np.int64) * len(rel_ids) + self.rel) * 2 + self.direction)
-                  * n_types + self.types[self.dst])
+        self.action_policy = action
+        source_type = (self.types[self.src].astype(np.int64) if action == "schema"
+                       else np.zeros(len(self.src), np.int64))
+        packed = (((source_type * len(rel_ids) + self.rel) * 2 + self.direction) * n_types + self.types[self.dst])
         keys, inverse_index = np.unique(packed, return_inverse=True)
         self.schema = inverse_index.astype(np.int32)
+        # (loại nguồn, quan hệ, chiều, loại đích); loại nguồn = -1 khi action không chứa nó.
         self.schemas = []
         for key in keys:
             dest_type = int(key % n_types)
@@ -121,7 +132,8 @@ class Graph:
             direction = int(key % 2)
             key //= 2
             relation = int(key % len(rel_ids))
-            self.schemas.append((int(key // len(rel_ids)), relation, direction, dest_type))
+            self.schemas.append((int(key // len(rel_ids)) if action == "schema" else -1, relation, direction,
+                                 dest_type))
         self.skipped: list[dict] = []
         self.splits = {"train": self._questions(read_jsonl(root / "qa_train.jsonl"), "train", True),
                        "val": self._questions(read_jsonl(root / "qa_val.jsonl"), "val", True),
@@ -186,7 +198,7 @@ class Graph:
         return {"nodes": len(self.ids), "triples_raw": self.raw_edges, "triples_unique": self.unique_edges,
                 "inverse_policy": self.inverse_policy, "inverse_edges_added": self.inverse_added,
                 "directed_edges": len(self.src), "relations": len(self.relation_ids),
-                "schemas": len(self.schemas),
+                "action_policy": self.action_policy, "schemas": len(self.schemas),
                 "split_sizes": {k: len(v) for k, v in self.splits.items()},
                 "questions_without_topic": {k: sum(not q.topics for q in v) for k, v in self.splits.items()},
                 "multi_topic_questions": {k: sum(len(q.topics) > 1 for q in v) for k, v in self.splits.items()},

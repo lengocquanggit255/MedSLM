@@ -1,0 +1,8 @@
+[{"slug": "ritek-hop-v8-prime-smoke2", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "prime", "CONFIG": "smoke_prime", "DEADLINE_H": "2.5",
+           "CODE_SHA": "7b4776ce5eaca629b317ddcbe8bf2ead6b98fd21cd78fa114833dc91f9b9199c"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-prime"], "accounts": ["minhlon192"], "timeout": 10800},
+ {"slug": "ritek-hop-v8-adint-smoke", "code": "HOP/hop_polo_v8/kaggle/hop_v8.py",
+  "args": {"DATASET": "adint", "CONFIG": "smoke_adint", "DEADLINE_H": "2.5",
+           "CODE_SHA": "7b4776ce5eaca629b317ddcbe8bf2ead6b98fd21cd78fa114833dc91f9b9199c"},
+  "datasets": ["ritek-hop-v8-code", "ritek-hop-v8-adint"], "accounts": ["minhduonngg"], "timeout": 10800}]

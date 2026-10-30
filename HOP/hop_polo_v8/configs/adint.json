@@ -1,0 +1,15 @@
+{
+  "extends": "default.json",
+  "selection": {"tie_break": "recall_at_20",
+                "rule": "highest validation Hits@1; Hits@1 tie -> higher Recall@20, then earliest epoch",
+                "early_stopping": "patience consecutive epochs without a gain in (Hits@1, then Recall@20), per phase"},
+  "synthetic": {"patience": 5},
+  "qa_sft": {"patience": 5},
+  "policy_warmup": {"patience": 5},
+  "policy": {"patience": 5},
+  "pool_ranker": {"patience": 5},
+  "variant": "ADint theo EDA (quyết định 2026-10-28): 4 hop (<= 3 hop phủ 90,3%, <= 4 hop 97,9% đáp án); action (quan hệ, chiều, loại đích) = 1.395 token thay 16.732 schema; pool gồm cả hop cuối; quota theo tỉ lệ đáp án 46,7/33,1/9,7/7,7%",
+  "max_hops": 4,
+  "pool_depth_quotas": [0.48, 0.34, 0.10, 0.08],
+  "pool_last_hop": true
+}

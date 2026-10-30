@@ -12,7 +12,7 @@ from .codebook import Codebook
 from .data import Graph, Question
 from .program import Executor, Hop, Program, ProgramCodec, evidence_programs
 
-MAX_HOPS = 3
+SUPPORTED_HOPS = (3, 4)
 
 
 def expansion_cost(graph: Graph, path) -> float:
@@ -24,17 +24,17 @@ def _best(graph: Graph, items, limit: int):
     return sorted(unique, key=lambda item: (expansion_cost(graph, item[1]), item))[:limit]
 
 
-def answer_paths(graph: Graph, question: Question, answer: int, *, per_depth: int = 24,
+def answer_paths(graph: Graph, question: Question, answer: int, *, max_hops: int, per_depth: int = 24,
                  three_hop_scan_limit: int = 2_000_000):
-    """Đường 0/1/2 hop; đường 3 hop chỉ khi không có đường ngắn hơn. Giới hạn quét chỉ áp cho khai thác nhãn."""
+    """Đường 0/1/2 hop; đường 3 (rồi 4) hop chỉ khi không có đường ngắn hơn. Giới hạn quét chỉ áp cho khai thác nhãn."""
+    if max_hops not in SUPPORTED_HOPS:
+        raise ValueError(f"max_hops must be one of {SUPPORTED_HOPS}")
     answer = int(answer)
-    buckets = {depth: [] for depth in range(MAX_HOPS + 1)}
+    buckets = {depth: [] for depth in range(max_hops + 1)}
     for pos, topic in enumerate(question.topics):
         if topic == answer:
             buckets[0].append((pos, ()))
-    incoming: dict[int, list[int]] = {}
-    for edge in graph.in_edges(answer):
-        incoming.setdefault(int(graph.src[edge]), []).append(int(edge))
+    incoming = incoming_edges(graph, answer)
     for edges in incoming.values():
         edges.sort(key=lambda e: (expansion_cost(graph, (e,)), e))
         del edges[per_depth:]
@@ -67,15 +67,70 @@ def answer_paths(graph: Graph, question: Question, answer: int, *, per_depth: in
         buckets[3] = _best(graph, buckets[3], per_depth)
         if buckets[3]:
             shortest = 3
+    if shortest is None and max_hops >= 4:
+        buckets[4], extra_scanned, extra_censored = four_hop_paths(
+            graph, question, incoming, per_depth=per_depth, scan_limit=three_hop_scan_limit)
+        scanned += extra_scanned
+        censored = censored or extra_censored
+        if buckets[4]:
+            shortest = 4
     return buckets, shortest, scanned, censored
+
+
+def four_hop_paths(graph: Graph, q: Question, incoming: dict[int, list[int]], *, per_depth: int, scan_limit: int):
+    """Đường 4 hop: 2 hop xuôi từ topic gặp 2 hop ngược từ đáp án ở nút giữa thứ hai.
+
+    `incoming` = cạnh vào đáp án theo nút nguồn. Dựng phía ngược và quét phía xuôi cùng tính vào `scan_limit`.
+    """
+    backward: dict[int, list[tuple[int, int]]] = {}
+    scanned, censored = 0, False
+    for last_edges in incoming.values():
+        for d in last_edges:
+            for c in graph.in_edges(int(graph.src[d])):
+                backward.setdefault(int(graph.src[c]), []).append((int(c), int(d)))
+                scanned += 1
+                if scanned >= scan_limit:
+                    censored = True
+                    break
+            if censored:
+                break
+        if censored:
+            break
+    for pairs in backward.values():
+        pairs.sort(key=lambda pair: (expansion_cost(graph, pair), pair))
+        del pairs[per_depth:]
+    paths = []
+    for pos, topic in enumerate(q.topics):
+        for a in graph.out_edges(topic):
+            for b in graph.out_edges(int(graph.dst[a])):
+                if censored:
+                    break
+                scanned += 1
+                for c, d in backward.get(int(graph.dst[b]), ()):
+                    paths.append((pos, (int(a), int(b), c, d)))
+                if len(paths) > per_depth * 8:
+                    paths = _best(graph, paths, per_depth)
+                if scanned >= scan_limit:
+                    censored = True
+            if censored:
+                break
+        if censored:
+            break
+    return _best(graph, paths, per_depth), scanned, censored
+
+
+def incoming_edges(graph: Graph, answer: int) -> dict[int, list[int]]:
+    """Cạnh vào `answer`, gom theo nút nguồn."""
+    incoming: dict[int, list[int]] = {}
+    for edge in graph.in_edges(answer):
+        incoming.setdefault(int(graph.src[edge]), []).append(int(edge))
+    return incoming
 
 
 def extra_three_hop_paths(graph: Graph, q: Question, answer: int, *, per_depth: int = 32,
                           scan_limit: int = 2_000_000):
     """Tìm thêm đường 3 hop khi đường ngắn hơn có nhưng vượt trần cạnh của nhãn."""
-    incoming: dict[int, list[int]] = {}
-    for edge in graph.in_edges(answer):
-        incoming.setdefault(int(graph.src[edge]), []).append(int(edge))
+    incoming = incoming_edges(graph, answer)
     paths = set()
     scanned = 0
     censored = False
@@ -99,7 +154,8 @@ def extra_three_hop_paths(graph: Graph, q: Question, answer: int, *, per_depth: 
 
 
 def executable_qa_labels(graph: Graph, codebook: Codebook, executor: Executor, codec: ProgramCodec,
-                         train: list[Question], *, cap: int, programs_per_answer: int, paths_per_depth: int):
+                         train: list[Question], *, cap: int, programs_per_answer: int, paths_per_depth: int,
+                         max_hops: int):
     """Mỗi đáp án train: tối đa `programs_per_answer` chương trình mà thực thi trong trần `cap` cạnh vẫn chứa nó."""
     assert executor.edge_budget == cap
     plans, per_answer = [], []
@@ -109,16 +165,20 @@ def executable_qa_labels(graph: Graph, codebook: Codebook, executor: Executor, c
         audit["questions"] += 1
         for answer in q.answers:
             one_answer = Question(q.qid, q.question, q.topics, (answer,), q.split)
-            buckets, shortest, scanned, censored = answer_paths(graph, one_answer, answer, per_depth=paths_per_depth)
+            buckets, shortest, scanned, censored = answer_paths(graph, one_answer, answer, max_hops=max_hops,
+                                                                per_depth=paths_per_depth)
             audit["answers"] += 1
             if shortest is not None:
                 shortest_hops[shortest] += 1
             accepted, chosen_depth, paths_considered, extra_scanned = [], None, 0, 0
-            for depth in range(shortest if shortest is not None else 0, MAX_HOPS + 1):
+            for depth in range(shortest if shortest is not None else 0, max_hops + 1):
                 paths = buckets[depth]
-                if depth == 3 and not paths and shortest is not None:
-                    paths, extra_scanned, extra_censored = extra_three_hop_paths(
-                        graph, one_answer, answer, per_depth=paths_per_depth)
+                if depth >= 3 and not paths and shortest is not None:
+                    # Có đường ngắn hơn nhưng nhãn ở đó vượt trần cạnh: tìm thêm đường dài hơn.
+                    paths, extra_scanned, extra_censored = (
+                        extra_three_hop_paths(graph, one_answer, answer, per_depth=paths_per_depth) if depth == 3
+                        else four_hop_paths(graph, one_answer, incoming_edges(graph, answer),
+                                            per_depth=paths_per_depth, scan_limit=2_000_000))
                     censored = censored or extra_censored
                 if not paths:
                     continue
@@ -155,9 +215,9 @@ def executable_qa_labels(graph: Graph, codebook: Codebook, executor: Executor, c
         audit["questions_with_labels"] += int(any(question_plans))
         if index % 1000 == 0:
             print(f"executable QA labels {index}/{len(train)}", flush=True)
-    summary = {**audit, "shortest_hops": {str(i): shortest_hops[i] for i in range(4)},
-               "label_hops": {str(i): chosen_hops[i] for i in range(4)},
-               "label_edge_cap": cap, "max_hops": MAX_HOPS, "programs_per_answer": programs_per_answer,
+    summary = {**audit, "shortest_hops": {str(i): shortest_hops[i] for i in range(max_hops + 1)},
+               "label_hops": {str(i): chosen_hops[i] for i in range(max_hops + 1)},
+               "label_edge_cap": cap, "max_hops": max_hops, "programs_per_answer": programs_per_answer,
                "sampling": "all feasible answers per labeled QA, equal QA weight"}
     return plans, summary, per_answer
 
@@ -170,15 +230,20 @@ def path_program(graph: Graph, codebook: Codebook, question: Question, topic_ind
                          for e in path))
 
 
-def teacher_paths(graph: Graph, questions: list[Question]):
-    """Đường ngắn nhất rẻ nhất cho mỗi đáp án; dùng chung cho warm-up và Setting B."""
+def teacher_paths(graph: Graph, questions: list[Question], max_hops: int):
+    """Đường ngắn nhất rẻ nhất cho mỗi đáp án; dùng chung cho warm-up và Setting B.
+
+    Đáp án không có đường <= max_hops (hoặc quét bị cắt) không có teacher, đếm ở khoá "none". Câu không còn đáp án
+    nào có teacher thì không vào loss, nhưng vẫn được chấm ở val/test như mọi câu khác.
+    """
     result, depths = [], Counter()
     for q in questions:
         choices = []
         for answer in q.answers:
-            buckets, shortest, _, _ = answer_paths(graph, q, answer)
+            buckets, shortest, _, _ = answer_paths(graph, q, answer, max_hops=max_hops)
             if shortest is None:
-                raise AssertionError(f"no <=3-hop teacher route: {q.qid}")
+                depths["none"] += 1
+                continue
             choices.append(buckets[shortest][0])
             depths[str(shortest)] += 1
         result.append(choices)

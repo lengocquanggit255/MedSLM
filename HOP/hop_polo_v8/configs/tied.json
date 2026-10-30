@@ -1,0 +1,5 @@
+{
+  "extends": "default.json",
+  "variant": "tied lm_head = hành vi V7 trên transformers 5.x (nhánh đối chứng của ablation lm_head 2026-10-28)",
+  "flan": {"untie_lm_head": false}
+}

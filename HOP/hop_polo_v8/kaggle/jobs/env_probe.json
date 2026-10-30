@@ -1,0 +1,2 @@
+[{"slug": "ritek-hop-v8-env-probe", "code": "HOP/hop_polo_v8/kaggle/env_probe.py", "gpu": false,
+  "args": {}, "datasets": [], "accounts": ["minhlon192"], "timeout": 1800}]

@@ -384,7 +384,9 @@ def make_synthetic_examples(graph: Graph, codebook: Codebook, codec: ProgramCode
         source, dest = int(graph.src[edge]), int(graph.dst[edge])
         schema = graph.schemas[int(graph.schema[edge])]
         relation = graph.relation_names[schema[1]] + (" inverse" if schema[2] else " forward")
-        text = (f"encode transition: {graph.type_names[schema[0]]} {relation} {graph.type_names[schema[3]]}; "
+        # Loại nguồn lấy từ nút (với action "schema" trùng schema[0]; action "target" không chứa loại nguồn).
+        text = (f"encode transition: {graph.type_names[graph.types[source]]} {relation} "
+                f"{graph.type_names[schema[3]]}; "
                 f"source {graph.names[source]}; destination {graph.names[dest]}; "
                 f"source neighborhood {neighborhood(source)}; destination neighborhood {neighborhood(dest)}")
         tokens = ["<READ_G>", f"<A_{int(graph.schema[edge])}>", "<STOP>"]

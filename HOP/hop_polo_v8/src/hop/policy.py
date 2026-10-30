@@ -25,7 +25,7 @@ from torch.nn import functional as F
 from .codebook import Codebook
 from .common import WORD, hash_words
 from .data import Graph, Question
-from .labels import MAX_HOPS, path_program
+from .labels import path_program
 from .program import Hop, Program
 
 HIDDEN, NODE, ACTION, CODE, EXTRA = 96, 32, 32, 16, 6
@@ -95,8 +95,9 @@ class EdgeScores:
 class FullPolicy(nn.Module):
     """Lịch sử LSTM theo câu hỏi; điểm cạnh và điểm nút trên toàn láng giềng (cùng tham số V7)."""
 
-    def __init__(self, n_nodes: int, n_actions: int, n_codes: int):
+    def __init__(self, n_nodes: int, n_actions: int, n_codes: int, max_hops: int):
         super().__init__()
+        self.max_hops = max_hops
         self.words = nn.Embedding(16384, 64)
         self.nodes = nn.Embedding(n_nodes, NODE)
         self.actions = nn.Embedding(n_actions + 1, ACTION)  # ID cuối là self-loop
@@ -168,7 +169,7 @@ class FullPolicy(nn.Module):
         ids = torch.as_tensor(nodes, dtype=torch.long, device=device)
         h = torch.stack([evidence[node][0] for node in nodes])
         extras = torch.tensor([[max(-30.0, evidence[n][1]) / 30, min(evidence[n][2], 30) / 30,
-                                evidence[n][3] / MAX_HOPS, float(evidence[n][1] == 0)] for n in nodes],
+                                evidence[n][3] / self.max_hops, float(evidence[n][1] == 0)] for n in nodes],
                               dtype=torch.float32, device=device)
         features = torch.cat((qvec.expand(len(nodes), -1), self.nodes(ids), h, extras), dim=1)
         return self.node_mlp(features).squeeze(1)
@@ -207,7 +208,7 @@ def target_hop(program: Program, depth: int, stop_id: int) -> Hop:
 
 
 def teacher_loss(policy: FullPolicy, gt: GraphTensors, graph: Graph, codebook: Codebook, q: Question,
-                 teacher, qctx: QuestionContext, device, planner_guided_hops: int = MAX_HOPS):
+                 teacher, qctx: QuestionContext, device):
     """CE trên toàn bộ danh sách láng giềng theo đường teacher + rank loss nút (đáp án vs nhiễu điểm cao)."""
     qvec = policy.question(qctx.words, device)
     zero = torch.zeros(HIDDEN, device=device)
@@ -220,9 +221,8 @@ def teacher_loss(policy: FullPolicy, gt: GraphTensors, graph: Graph, codebook: C
     h = c = zero
     previous = policy.n_actions
     losses, distractors = [], set()
-    for depth in range(MAX_HOPS):
-        hop = (target_hop(program, depth, policy.n_actions) if depth < planner_guided_hops
-               else Hop(policy.n_actions, None))
+    for depth in range(policy.max_hops):
+        hop = target_hop(program, depth, policy.n_actions)
         start, end = int(gt.indptr[current]), int(gt.indptr[current + 1])
         target = path[depth] if depth < len(path) else -1
         if target != -1 and not start <= target < end:

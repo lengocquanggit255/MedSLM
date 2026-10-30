@@ -50,6 +50,8 @@ from hop.setting_b import answer_mass  # noqa: E402
 from hop.common import word_set  # noqa: E402
 
 DEVICE = torch.device("cpu")
+# Cấu hình V7: 3 hop, quota cắt pool 48/47/5%, pool không lấy hop cuối.
+V7_POOL = {"depth_quotas": (0.48, 0.47, 0.05), "last_hop": False}
 
 
 def v7_hop(hop: Hop) -> V7Hop:
@@ -75,7 +77,7 @@ class EquivalenceV7(unittest.TestCase):
         cls.gt = GraphTensors(cls.g8, cls.cb8, DEVICE)
         cls.degrees7 = torch.as_tensor(np.log1p(np.diff(cls.g7.indptr)) / 16, dtype=torch.float32)
         torch.manual_seed(3)
-        cls.p8 = FullPolicy(len(cls.g8.ids), len(cls.g8.schemas), cls.cb8.size)
+        cls.p8 = FullPolicy(len(cls.g8.ids), len(cls.g8.schemas), cls.cb8.size, 3)
         cls.p7 = v7_policy.FullPolicy(len(cls.g7.ids), len(cls.g7.schemas), int(node_codes.max()) + 1)
         cls.p7.load_state_dict(cls.p8.state_dict())
         cls.questions = random.Random(5).sample(cls.g7.splits["train"], 40)
@@ -110,7 +112,7 @@ class EquivalenceV7(unittest.TestCase):
     def gold_programs(self, q, executor, codebook):
         programs = []
         for answer in q.answers[:2]:
-            buckets, shortest, _, _ = v8_labels.answer_paths(self.g8, q, answer)
+            buckets, shortest, _, _ = v8_labels.answer_paths(self.g8, q, answer, max_hops=3)
             if shortest:
                 for pos, path in buckets[shortest][:2]:
                     programs.append(v8_labels.path_program(self.g8, codebook, q, pos, path))
@@ -120,7 +122,7 @@ class EquivalenceV7(unittest.TestCase):
     def test_answer_paths_and_execute(self):
         for q in self.questions:
             for answer in q.answers[:2]:
-                self.assertEqual(v8_labels.answer_paths(self.g8, q, answer)[:2],
+                self.assertEqual(v8_labels.answer_paths(self.g8, q, answer, max_hops=3)[:2],
                                  v7_aligned.answer_paths(self.g7, q, answer)[:2])
             for program in self.gold_programs(q, self.ex8, self.cb8):
                 a = self.ex8.execute(q.topics, program)
@@ -175,7 +177,7 @@ class EquivalenceV7(unittest.TestCase):
 
     def test_teacher_loss(self):
         for q in self.questions[:15]:
-            teacher, _ = v8_labels.teacher_paths(self.g8, [q])
+            teacher, _ = v8_labels.teacher_paths(self.g8, [q], 3)
             for chosen in teacher[0][:2]:
                 ce8, rank8 = teacher_loss(self.p8, self.gt, self.g8, self.cb8, q, chosen,
                                           question_context(self.gt, q), DEVICE)
@@ -202,7 +204,7 @@ class EquivalenceV7(unittest.TestCase):
             cached = self.cache_for(q)
             qctx = question_context(self.gt, q)
             nodes8, *_ = pool_candidates(self.p8, self.gt, q, cached, qctx, path_beam=30, local_k=60,
-                                         rescue_slots=6, maximum=1200)
+                                         rescue_slots=6, maximum=1200, **V7_POOL)
             nodes7, *_ = v7_search.pool_candidates(self.p7, self.g7, self.cb7, q, cached, self.degrees7,
                                                    path_beam=30, local_k=60, rescue_slots=6, maximum=1200)
             jaccard = len(set(nodes8) & set(nodes7)) / max(1, len(set(nodes8) | set(nodes7)))
@@ -211,7 +213,7 @@ class EquivalenceV7(unittest.TestCase):
             if nodes8 != nodes7:
                 continue
             row8 = collect_pool(self.p8, self.gt, self.g8, q, cached, qctx, (names, texts, relations),
-                                path_beam=30, local_k=60, rescue_slots=6, max_nodes=1200)
+                                path_beam=30, local_k=60, rescue_slots=6, max_nodes=1200, **V7_POOL)
             row7 = v7_ranker.collect_pool(self.p7, self.g7, self.cb7, q, cached, self.degrees7, names, texts, relations,
                                           path_beam=30, local_k=60, rescue_slots=6, max_nodes=1200)
             np.testing.assert_array_equal(row8.nodes, row7.nodes)
@@ -252,7 +254,8 @@ class EquivalenceV7(unittest.TestCase):
         c7 = V7Codec(t7, self.g7, self.ex7, max_hops=3, include_g=False)
         subset = self.questions[:25]
         plans8, summary8, _ = v8_labels.executable_qa_labels(self.g8, self.cb8, lab8, c8, subset, cap=200,
-                                                             programs_per_answer=3, paths_per_depth=32)
+                                                             programs_per_answer=3, paths_per_depth=32,
+                                                             max_hops=3)
         plans7, summary7, _ = v7_flan.executable_qa_labels(self.g7, self.cb7, lab7, c7, subset, cap=200,
                                                            programs_per_answer=3, paths_per_depth=32)
         self.assertEqual(plans8, plans7)

@@ -5,7 +5,8 @@ Khối lượng không phải xác suất đã hiệu chỉnh của việc lọt
 top-k khả vi `capacity_topk` với nhiệt độ tau.
 
 Khác V7 về cách tính: phần tĩnh của các cạnh ra một nút (`edge_static`) được tính một lần cho mỗi câu
-hỏi rồi dùng chung cho mọi nhánh chương trình; chỉ số cạnh lấy trực tiếp từ đoạn CSR thay vì dict/list.
+hỏi rồi dùng chung cho mọi nhánh chương trình; chỉ số cạnh lấy trực tiếp từ đoạn CSR thay vì dict/list;
+log-softmax ở bước hai được gradient-checkpoint khi huấn luyện (giữ bộ nhớ GPU khi nút giữa là hub).
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from collections import Counter, defaultdict
 import numpy as np
 import torch
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 
 from .labels import Route
 from .policy import HIDDEN, FullPolicy, GraphTensors, QuestionContext, initial_score, question_context, target_hop
@@ -108,6 +110,9 @@ def answer_mass(policy: FullPolicy, gt: GraphTensors, q, cached, qctx: QuestionC
             static_cache[node] = policy.edge_static(gt, node)
         return static_cache[node]
 
+    def second_hop(mid_static, h2, hop2, probability):
+        return F.log_softmax(policy.edge_logits(gt, mid_static, qctx.overlap, h2, hop2, probability).logits, dim=0)
+
     by_pos = defaultdict(list)
     for route in routes:
         by_pos[route.topic_pos].append(route)
@@ -166,10 +171,15 @@ def answer_mass(policy: FullPolicy, gt: GraphTensors, q, cached, qctx: QuestionC
                 if e1 not in second:
                     mid = int(scores1.static.dst[j1])
                     h2, _ = policy.step(qvec, mid, int(scores1.static.act[j1]), hop2, h, c)
-                    scores2 = policy.edge_logits(gt, static(mid), qctx.overlap, h2, hop2, probability)
-                    logpi2 = F.log_softmax(scores2.logits, dim=0)
+                    mid_static = static(mid)
+                    if torch.is_grad_enabled():
+                        # Nút giữa có thể là hub ~15k cạnh (Prime): kích hoạt [cạnh, 64] của mọi nhánh x cạnh đầu
+                        # vượt 14 GB nếu giữ cho backward, nên tính lại khi backward (cùng phép toán, cùng gradient).
+                        logpi2 = checkpoint(second_hop, mid_static, h2, hop2, probability, use_reentrant=False)
+                    else:
+                        logpi2 = second_hop(mid_static, h2, hop2, probability)
                     z2 = capacity_topk(logpi2, min(local_k, len(logpi2)), tau) if mode == "C" else None
-                    second[e1] = (scores2.static.start, logpi2, z2)
+                    second[e1] = (mid_static.start, logpi2, z2)
                 start2, logpi2, z2 = second[e1]
                 j2 = route.edges[1] - start2
                 contribution = contribution * logpi2[j2].exp()
@@ -215,7 +225,8 @@ def train_soft_hard_gap(policy, gt, questions, cache, routes, config, tau):
             nodes, *_ = pool_candidates(policy, gt, q, cached, qctx, path_beam=config["path_beam"],
                                         local_k=config["local_top_k"],
                                         rescue_slots=config["terminal_rescue_slots"],
-                                        maximum=config["max_pool_nodes"])
+                                        maximum=config["max_pool_nodes"], depth_quotas=config["pool_depth_quotas"],
+                                        last_hop=config["pool_last_hop"])
             eligible = [a for a, rr in zip(q.answers, grouped) if a not in q.topics and rr and len(rr[0].edges) <= 2]
             if eligible:
                 masses.append(float(mean_mass))

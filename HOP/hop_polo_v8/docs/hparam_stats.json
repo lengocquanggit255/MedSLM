@@ -1,0 +1,398 @@
+{
+ "sample_questions": 500,
+ "seed": 42,
+ "datasets": {
+  "pharmkg": {
+   "graph": {
+    "nodes": 7262,
+    "directed_edges": 807545,
+    "triples": 479902,
+    "inverse_edges_added": 327643,
+    "relations": 28,
+    "schemas": 552,
+    "node_types": 7,
+    "actions_relation_direction_target_type": 182,
+    "out_degree": {
+     "p50": 60.0,
+     "p90": 245.9,
+     "p99": 915.1,
+     "p99.9": 2217.9,
+     "mean": 111.2,
+     "max": 5913.0,
+     "n": 7262
+    }
+   },
+   "qa": {
+    "train": 8186,
+    "val": 1024,
+    "test": 1023,
+    "updates_per_epoch_batch16": 512,
+    "answers_per_question": {
+     "p50": 1.0,
+     "p90": 1.0,
+     "p99": 3.0,
+     "mean": 1.1,
+     "max": 3.0,
+     "n": 9210
+    },
+    "share_questions_more_than_20_answers": 0.0,
+    "topics_per_question": {
+     "p50": 1.0,
+     "p90": 1.0,
+     "p99": 1.0,
+     "mean": 1.0,
+     "max": 1.0,
+     "n": 9210
+    },
+    "topic_out_degree": {
+     "p50": 197.0,
+     "p90": 821.5,
+     "p99": 2316.0,
+     "mean": 341.4,
+     "max": 5913.0,
+     "n": 8186
+    }
+   },
+   "answers_sample": {
+    "questions": 500,
+    "answers": 552,
+    "max_hops": 3,
+    "shortest_hops_share": {
+     "0": 0.013,
+     "1": 0.813,
+     "2": 0.174
+    },
+    "first_hop_group_edges": {
+     "p50": 9.0,
+     "p90": 70.0,
+     "p99": 226.4,
+     "mean": 26.5,
+     "max": 466.0,
+     "n": 545
+    },
+    "first_hop_group_share_within": {
+     "200": 0.987,
+     "500": 1.0,
+     "1000": 1.0
+    },
+    "two_hop_mid_out_degree": {
+     "p50": 96.5,
+     "p90": 311.5,
+     "p99": 1008.8,
+     "mean": 161.7,
+     "max": 1404.0,
+     "n": 96
+    },
+    "two_hop_routes_per_answer": {
+     "p50": 38.5,
+     "p90": 151.0,
+     "p99": 391.0,
+     "mean": 66.6,
+     "max": 563.0,
+     "n": 96
+    },
+    "two_hop_routes_share_within_256": 0.948,
+    "direct_routes_per_answer": {
+     "p50": 1.0,
+     "p90": 2.0,
+     "p99": 4.0,
+     "mean": 1.4,
+     "max": 5.0,
+     "n": 449
+    }
+   },
+   "exact_hops_train_val": {
+    "answers": 10177,
+    "max_finite_hops": 3,
+    "per_answer": {
+     "0": 0.0161,
+     "1": 0.7723,
+     "2": 0.2114,
+     "3": 0.0002
+    },
+    "per_question_all_answers": {
+     "0": 0.0144,
+     "1": 0.7644,
+     "2": 0.221,
+     "3": 0.0002
+    }
+   },
+   "synthetic_coverage_at_10000": {
+    "nodes": 1.0,
+    "edges": 0.0124
+   },
+   "codebook_3x64": {
+    "full_codes_available": 262144,
+    "nodes_per_full_code_if_uniform": 0.028
+   },
+   "seconds": 15.4
+  },
+  "prime": {
+   "graph": {
+    "nodes": 129375,
+    "directed_edges": 8100498,
+    "triples": 8100498,
+    "inverse_edges_added": 0,
+    "relations": 18,
+    "schemas": 56,
+    "node_types": 10,
+    "actions_relation_direction_target_type": 45,
+    "out_degree": {
+     "p50": 4.0,
+     "p90": 136.0,
+     "p99": 989.5,
+     "p99.9": 5223.0,
+     "mean": 62.6,
+     "max": 17355.0,
+     "n": 129375
+    }
+   },
+   "qa": {
+    "train": 4522,
+    "val": 503,
+    "test": 2801,
+    "updates_per_epoch_batch16": 283,
+    "answers_per_question": {
+     "p50": 1.0,
+     "p90": 7.0,
+     "p99": 17.0,
+     "mean": 2.6,
+     "max": 20.0,
+     "n": 5025
+    },
+    "share_questions_more_than_20_answers": 0.0,
+    "topics_per_question": {
+     "p50": 1.0,
+     "p90": 1.0,
+     "p99": 1.0,
+     "mean": 1.0,
+     "max": 1.0,
+     "n": 5025
+    },
+    "topic_out_degree": {
+     "p50": 31.0,
+     "p90": 738.9,
+     "p99": 1843.6,
+     "mean": 261.4,
+     "max": 16420.0,
+     "n": 4522
+    }
+   },
+   "answers_sample": {
+    "questions": 500,
+    "answers": 1373,
+    "max_hops": 3,
+    "shortest_hops_share": {
+     "0": 0.007,
+     "1": 0.425,
+     "2": 0.31,
+     "3": 0.255,
+     "None": 0.003
+    },
+    "first_hop_group_edges": {
+     "p50": 14.0,
+     "p90": 1171.0,
+     "p99": 2130.0,
+     "mean": 228.0,
+     "max": 2130.0,
+     "n": 1010
+    },
+    "first_hop_group_share_within": {
+     "200": 0.83,
+     "500": 0.836,
+     "1000": 0.884
+    },
+    "two_hop_mid_out_degree": {
+     "p50": 353.0,
+     "p90": 15082.0,
+     "p99": 16513.0,
+     "mean": 4109.2,
+     "max": 16513.0,
+     "n": 426
+    },
+    "two_hop_routes_per_answer": {
+     "p50": 4.0,
+     "p90": 52.5,
+     "p99": 501.8,
+     "mean": 32.2,
+     "max": 821.0,
+     "n": 426
+    },
+    "two_hop_routes_share_within_256": 0.948,
+    "direct_routes_per_answer": {
+     "p50": 1.0,
+     "p90": 1.0,
+     "p99": 1.0,
+     "mean": 1.0,
+     "max": 1.0,
+     "n": 584
+    }
+   },
+   "exact_hops_train_val": {
+    "answers": 13066,
+    "max_finite_hops": 5,
+    "per_answer": {
+     "0": 0.0103,
+     "1": 0.4205,
+     "2": 0.3051,
+     "3": 0.2624,
+     "4": 0.0012,
+     "5": 0.0005
+    },
+    "per_question_all_answers": {
+     "0": 0.0129,
+     "1": 0.4426,
+     "2": 0.2683,
+     "3": 0.2736,
+     "4": 0.0018,
+     "5": 0.0008
+    }
+   },
+   "synthetic_coverage_at_10000": {
+    "nodes": 0.077,
+    "edges": 0.0012
+   },
+   "codebook_3x64": {
+    "full_codes_available": 262144,
+    "nodes_per_full_code_if_uniform": 0.494
+   },
+   "seconds": 275.1
+  },
+  "adint": {
+   "graph": {
+    "nodes": 162006,
+    "directed_edges": 1571054,
+    "triples": 1081405,
+    "inverse_edges_added": 489649,
+    "relations": 15,
+    "schemas": 16732,
+    "node_types": 112,
+    "actions_relation_direction_target_type": 1395,
+    "out_degree": {
+     "p50": 3.0,
+     "p90": 24.0,
+     "p99": 74.0,
+     "p99.9": 298.0,
+     "mean": 9.7,
+     "max": 13113.0,
+     "n": 162006
+    }
+   },
+   "qa": {
+    "train": 3457,
+    "val": 384,
+    "test": 482,
+    "updates_per_epoch_batch16": 217,
+    "answers_per_question": {
+     "p50": 1.0,
+     "p90": 1.0,
+     "p99": 2.0,
+     "mean": 1.0,
+     "max": 3.0,
+     "n": 3841
+    },
+    "share_questions_more_than_20_answers": 0.0,
+    "topics_per_question": {
+     "p50": 1.0,
+     "p90": 1.0,
+     "p99": 4.0,
+     "mean": 1.1,
+     "max": 12.0,
+     "n": 3841
+    },
+    "topic_out_degree": {
+     "p50": 24.0,
+     "p90": 241.0,
+     "p99": 499.7,
+     "mean": 75.6,
+     "max": 13113.0,
+     "n": 3815
+    }
+   },
+   "answers_sample": {
+    "questions": 500,
+    "answers": 518,
+    "max_hops": 4,
+    "shortest_hops_share": {
+     "0": 0.006,
+     "1": 0.454,
+     "2": 0.319,
+     "3": 0.093,
+     "4": 0.102,
+     "None": 0.027
+    },
+    "first_hop_group_edges": {
+     "p50": 1.0,
+     "p90": 6.0,
+     "p99": 137.0,
+     "mean": 4.3,
+     "max": 137.0,
+     "n": 400
+    },
+    "first_hop_group_share_within": {
+     "200": 1.0,
+     "500": 1.0,
+     "1000": 1.0
+    },
+    "two_hop_mid_out_degree": {
+     "p50": 75.0,
+     "p90": 13113.0,
+     "p99": 13113.0,
+     "mean": 2105.5,
+     "max": 13113.0,
+     "n": 165
+    },
+    "two_hop_routes_per_answer": {
+     "p50": 3.0,
+     "p90": 16.0,
+     "p99": 69.8,
+     "mean": 8.0,
+     "max": 150.0,
+     "n": 165
+    },
+    "two_hop_routes_share_within_256": 1.0,
+    "direct_routes_per_answer": {
+     "p50": 1.0,
+     "p90": 2.0,
+     "p99": 6.7,
+     "mean": 1.4,
+     "max": 8.0,
+     "n": 235
+    }
+   },
+   "exact_hops_train_val": {
+    "answers": 4021,
+    "max_finite_hops": 6,
+    "per_answer": {
+     "0": 0.0077,
+     "1": 0.467,
+     "2": 0.3313,
+     "3": 0.0967,
+     "4": 0.0766,
+     "5": 0.0157,
+     "6": 0.0017,
+     "inf": 0.0032
+    },
+    "per_question_all_answers": {
+     "0": 0.0081,
+     "1": 0.452,
+     "2": 0.3374,
+     "3": 0.1008,
+     "4": 0.0802,
+     "5": 0.0164,
+     "6": 0.0018,
+     "inf": 0.0034
+    }
+   },
+   "synthetic_coverage_at_10000": {
+    "nodes": 0.062,
+    "edges": 0.0064
+   },
+   "codebook_3x64": {
+    "full_codes_available": 262144,
+    "nodes_per_full_code_if_uniform": 0.618
+   },
+   "seconds": 162.6
+  }
+ }
+}

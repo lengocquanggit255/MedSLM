@@ -11,15 +11,31 @@ import torch
 from torch.nn import functional as F
 
 from .common import jsonl
-from .labels import MAX_HOPS
 from .program import input_text, program_to_dict
 
 
-def initialize_program_tokens(model, tokenizer, old_vocab_size: int, *, seed: int) -> dict:
-    """Token chương trình mới = embedding của "the" + nhiễu 0.01 (đầu vào và đầu ra nếu không buộc trọng số)."""
+def initialize_program_tokens(model, tokenizer, old_vocab_size: int, *, seed: int, untie_lm_head: bool) -> dict:
+    """Token chương trình mới = embedding của "the" + nhiễu 0.01 (đầu vào và đầu ra nếu không buộc trọng số).
+
+    transformers 5.x ép `tie_word_embeddings=True` cho mọi T5, nên `resize_token_embeddings` thay lm_head đã
+    huấn luyện riêng của Flan-T5 (v1.1) bằng chính ma trận embedding. V7 (và checkpoint Setting B cũ) chạy
+    như vậy. `untie_lm_head=True` dựng lại lm_head riêng từ trọng số gốc sau khi resize.
+    """
     torch.manual_seed(seed)
     anchor = tokenizer.encode("the", add_special_tokens=False)[0]
+    original_head = model.get_output_embeddings().weight.detach().clone()
+    untied_before = original_head.data_ptr() != model.get_input_embeddings().weight.data_ptr()
     model.resize_token_embeddings(len(tokenizer), mean_resizing=False)
+    rebuilt = False
+    if untie_lm_head and untied_before and \
+            model.get_output_embeddings().weight.data_ptr() == model.get_input_embeddings().weight.data_ptr():
+        head = torch.nn.Linear(original_head.shape[1], len(tokenizer), bias=False,
+                               device=original_head.device, dtype=original_head.dtype)
+        with torch.no_grad():
+            keep = min(old_vocab_size, original_head.shape[0])
+            head.weight[:keep] = original_head[:keep]
+        model.set_output_embeddings(head)
+        rebuilt = True
     with torch.no_grad():
         incoming = model.get_input_embeddings().weight
         outgoing = model.get_output_embeddings().weight
@@ -29,6 +45,7 @@ def initialize_program_tokens(model, tokenizer, old_vocab_size: int, *, seed: in
             outgoing[old_vocab_size:] = source_out + 0.01 * torch.randn_like(outgoing[old_vocab_size:])
     return {"anchor_token": "the", "anchor_id": anchor, "old_vocab_size": old_vocab_size,
             "program_token_count": len(tokenizer) - old_vocab_size,
+            "untie_lm_head": untie_lm_head, "lm_head_rebuilt_after_resize": rebuilt,
             "input_output_tied": outgoing.data_ptr() == incoming.data_ptr()}
 
 
@@ -100,7 +117,7 @@ def decode_programs(model, tokenizer, codec, graph, questions, cache_path: Path,
                             return_token_type_ids=False).to(device)
         with torch.inference_mode():
             generated = model.generate(**encoded, num_beams=beam, num_return_sequences=beam,
-                                       max_new_tokens=max(26, 8 * MAX_HOPS + 2),
+                                       max_new_tokens=max(26, 8 * codec.max_hops + 2),
                                        prefix_allowed_tokens_fn=lambda _batch, ids: codec.allowed(ids.tolist(), q.topics),
                                        return_dict_in_generate=True, output_scores=True,
                                        length_penalty=length_penalty, renormalize_logits=True, early_stopping=True)
@@ -121,11 +138,11 @@ def decode_programs(model, tokenizer, codec, graph, questions, cache_path: Path,
     return rows
 
 
-def program_distribution(cached, questions, *, train_zero_rate, zero_factor=5.0, zero_floor=0.10,
+def program_distribution(cached, questions, *, max_hops, train_zero_rate, zero_factor=5.0, zero_floor=0.10,
                          nonzero_beam_floor=0.50) -> dict:
     """Audit hạng beam và khối lượng xác suất theo số hop, không đổi dự đoán."""
     by_rank = [Counter() for _ in range(5)]
-    mass = {str(depth): [] for depth in range(MAX_HOPS + 1)}
+    mass = {str(depth): [] for depth in range(max_hops + 1)}
     top_zero = top_zero_gold = top_zero_wrong = beam_nonzero = 0
     for q, row in zip(questions, cached):
         beams = row["beams"]
@@ -134,7 +151,7 @@ def program_distribution(cached, questions, *, train_zero_rate, zero_factor=5.0,
             hops = len(beam["program"]["hops"])
             by_rank[min(rank, 4)][str(hops)] += 1
             values[str(hops)] += float(beam["probability"])
-        for depth in range(MAX_HOPS + 1):
+        for depth in range(max_hops + 1):
             mass[str(depth)].append(float(values[str(depth)]))
         if beams and not beams[0]["program"]["hops"]:
             top_zero += 1

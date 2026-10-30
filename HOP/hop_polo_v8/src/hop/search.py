@@ -1,4 +1,8 @@
-"""Tìm kiếm HOP/PoLo có ngân sách slot theo chương trình, và pool ứng viên trước khi cắt (độ sâu 1-2)."""
+"""Tìm kiếm HOP/PoLo có ngân sách slot theo chương trình, và pool ứng viên trước khi cắt beam.
+
+Pool lấy mọi con trong top-`local_k` ở mỗi hop trước hop cuối (như V7); `last_hop=True` lấy cả hop cuối,
+thay vì chỉ các đường còn trong beam cuối (cần khi nhiều đáp án nằm ở độ sâu tối đa, vd 26% đáp án Prime).
+"""
 from __future__ import annotations
 
 import math
@@ -9,7 +13,6 @@ from dataclasses import dataclass
 import torch
 from torch.nn import functional as F
 
-from .labels import MAX_HOPS
 from .policy import (HIDDEN, FullPolicy, GraphTensors, QuestionContext, SearchState, global_prune,
                      initial_score, target_hop)
 from .program import Hop, Program, program_from_dict
@@ -57,8 +60,9 @@ def rescue_probability(programs, terminal) -> float:
 
 @torch.inference_mode()
 def search(policy: FullPolicy, gt: GraphTensors, q, cached, qctx: QuestionContext, *,
-           path_beam: int, local_k: int, rescue_slots: int) -> SearchTrace:
+           path_beam: int, local_k: int, rescue_slots: int, last_hop: bool) -> SearchTrace:
     started = time.perf_counter()
+    max_hops = policy.max_hops
     device = gt.device
     qvec = policy.question(qctx.words, device)
     zero = torch.zeros(HIDDEN, device=device)
@@ -74,7 +78,7 @@ def search(policy: FullPolicy, gt: GraphTensors, q, cached, qctx: QuestionContex
     pre, by_depth = [], []
     edges_scored = 0
     scored_nodes = set()
-    for depth in range(MAX_HOPS):
+    for depth in range(max_hops):
         expanded_all = []
         next_active = {}
         for index, states in active.items():
@@ -107,8 +111,8 @@ def search(policy: FullPolicy, gt: GraphTensors, q, cached, qctx: QuestionContex
                         state.node_hiddens + (h,), h, c, a))
             expanded_all.extend(expanded)
             next_active[index] = global_prune(expanded, slots[index],
-                                              duplicate_limit=1 if depth == MAX_HOPS - 1 else 2)
-        if depth < MAX_HOPS - 1:
+                                              duplicate_limit=1 if depth == max_hops - 1 else 2)
+        if depth < max_hops - 1 or last_hop:
             pre.append(expanded_all)
         active = next_active
         by_depth.append([s for states in active.values() for s in states])
@@ -150,24 +154,50 @@ def _routes(trace: SearchTrace, q, device):
     return evidence, routes, final_nodes
 
 
-def cap_candidates(evidence, routes, topics, maximum: int = 1200):
+def depth_seats(counts: list[int], quotas: list[float], budget: int) -> tuple[list[int], list[int]]:
+    """Chỗ trong pool cho từng độ sâu: phần gốc `int(budget * quota)` như V7, rồi chỗ thừa của độ sâu có ít ứng
+    viên hơn phần gốc được chia tiếp cho các độ sâu còn thiếu, theo cùng tỉ lệ quota.
+
+    V7 để chỗ thừa cho điểm toàn cục; điểm đường là tổng log-xác suất nên luôn nghiêng về nút nông. Khi chỉ một độ
+    sâu còn thiếu (PharmKG với 48/47/5%), hai cách cho cùng kết quả. Trả (phần gốc, tổng chỗ) theo độ sâu.
+    """
+    base = [int(budget * quota) for quota in quotas]
+    seats = [min(b, c) for b, c in zip(base, counts)]
+    free = sum(base) - sum(seats)
+    while free > 0:
+        hungry = [d for d, (s, c) in enumerate(zip(seats, counts)) if s < c and quotas[d] > 0]
+        if not hungry:
+            break
+        weight = sum(quotas[d] for d in hungry)
+        grants = {d: min(counts[d] - seats[d], int(free * quotas[d] / weight)) for d in hungry}
+        if not any(grants.values()):
+            break
+        for d, grant in grants.items():
+            seats[d] += grant
+        free -= sum(grants.values())
+    return base, seats
+
+
+def cap_candidates(evidence, routes, topics, maximum: int, quotas):
+    """Cắt pool về `maximum` nút: giữ topic, chia chỗ theo độ sâu (`quotas[d - 1]` cho độ sâu d), rồi điểm toàn cục."""
     if len(evidence) <= maximum:
         return evidence, routes, len(evidence)
     if maximum < len(topics):
         raise ValueError("pool cap smaller than topic count")
     topics = set(topics)
+    deepest = len(quotas)
     by_depth = defaultdict(list)
     for node in evidence:
         if node in topics:
             continue
         best = max(routes[node].values(), key=lambda row: row[0])
         depth = min(len(row[3]) for row in routes[node].values())
-        by_depth[min(depth, 3)].append((best[0], node))
+        by_depth[min(depth, deepest)].append((best[0], node))
     for values in by_depth.values():
         values.sort(key=lambda item: (-item[0], item[1]))
     keep = set(topics)
-    remaining = maximum - len(keep)
-    quotas = {1: int(remaining * 0.48), 2: int(remaining * 0.47), 3: int(remaining * 0.05)}
+    depths = range(1, deepest + 1)
+    base, seats = depth_seats([len(by_depth[d]) for d in depths], list(quotas), maximum - len(keep))
 
     def closure(node):
         found, pending = {node}, [node]
@@ -185,8 +215,11 @@ def cap_candidates(evidence, routes, topics, maximum: int = 1200):
         if len(keep | required) <= maximum:
             keep.update(required)
 
-    for depth in (1, 2, 3):
-        for _, node in by_depth[depth][:quotas[depth]]:
+    for depth, count in zip(depths, base):
+        for _, node in by_depth[depth][:count]:
+            consider(node)
+    for depth, start, end in zip(depths, base, seats):
+        for _, node in by_depth[depth][start:end]:
             consider(node)
     leftover = sorted(((score, node) for values in by_depth.values() for score, node in values if node not in keep),
                       key=lambda item: (-item[0], item[1]))
@@ -199,11 +232,15 @@ def cap_candidates(evidence, routes, topics, maximum: int = 1200):
 
 
 @torch.inference_mode()
-def pool_candidates(policy, gt, q, cached, qctx, *, path_beam, local_k, rescue_slots, maximum):
-    trace = search(policy, gt, q, cached, qctx, path_beam=path_beam, local_k=local_k, rescue_slots=rescue_slots)
+def pool_candidates(policy, gt, q, cached, qctx, *, path_beam, local_k, rescue_slots, maximum, depth_quotas,
+                    last_hop):
+    if len(depth_quotas) != policy.max_hops:
+        raise ValueError("need one depth quota per hop")
+    trace = search(policy, gt, q, cached, qctx, path_beam=path_beam, local_k=local_k, rescue_slots=rescue_slots,
+                   last_hop=last_hop)
     evidence, routes, final_nodes = _routes(trace, q, gt.device)
     uncapped_nodes = set(evidence)
-    evidence, routes, _ = cap_candidates(evidence, routes, q.topics, maximum)
+    evidence, routes, _ = cap_candidates(evidence, routes, q.topics, maximum, depth_quotas)
     return sorted(evidence), evidence, routes, final_nodes, uncapped_nodes, trace
 
 
